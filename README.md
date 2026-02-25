@@ -48,6 +48,7 @@ Scaffold only. Implementation TBD.
 - Bollerslev, Tauchen, Zhou (2009). Expected stock returns and variance risk premia. Review of Financial Studies. https://scholars.duke.edu/individual/pub732839
 - Bollerslev, Todorov, Xu (2015). Tail risk premia and return predictability. Journal of Financial Economics. https://scholars.duke.edu/publication/1060835
 - Bollerslev, Marrone, Xu, Zhou (2014). Stock return predictability and variance risk premia: international evidence. Journal of Financial and Quantitative Analysis. https://www.cambridge.org/core/journals/journal-of-financial-and-quantitative-analysis/article/abs/stock-return-predictability-and-variance-risk-premia-statistical-inference-and-international-evidence/0BE5DE1D942A0342DDBA24D7BFBEA5C8
+- Bekaert, Hoerova (2014). The VIX, the variance premium and stock market volatility. Journal of Econometrics. https://www.nber.org/papers/w18995
 
 ### Liquidity, funding liquidity, and regime shifts
 
@@ -69,12 +70,20 @@ Scaffold only. Implementation TBD.
 ### Financial stress indices
 
 - Monin (2019). The OFR Financial Stress Index. Risks. https://www.mdpi.com/2227-9091/7/1/25
+- Office of Financial Research. Financial Stress Index (FSI) methodology and data. https://www.financialresearch.gov/financial-stress-index/
 
 ### Regime-switching & macro regime signals
 
 - Cochrane, Piazzesi (2005). Bond risk premia. NBER Working Paper. https://www.nber.org/papers/w9178
-- Ang, Timmermann (2012). Regime changes and financial markets. NBER Working Paper. https://www.nber.org/papers/w17182
-- Ang, Bekaert (2004). How do regimes affect asset allocation? NBER Working Paper. https://www.nber.org/papers/w10080
+- Adrian, Crump, Moench (2013). Pricing the term structure with linear regressions. NY Fed Staff Report 340. https://www.newyorkfed.org/research/staff_reports/sr340.html
+
+### Credit spreads & risk premia
+
+- Gilchrist, Zakrajsek (2012). Credit spreads and business cycle fluctuations. American Economic Review. https://www.nber.org/papers/w17021
+
+### Volatility term structure
+
+- VIX term structure and contango/backwardation. Journal of Risk and Financial Management (2019). https://www.mdpi.com/1911-8074/12/3/113
 
 ### Market structure & crash propagation
 
