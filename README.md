@@ -282,7 +282,7 @@ Researchers and groups to monitor for new papers in this space:
 - Jonathan Donier
 - Niklas Wheatley
 - Tobias Huber
-- Reppen
-- Gantner
+- Max Reppen
+- Robert N. Gantner
 - Albert J. Menkveld
 - Yueshen Bian
