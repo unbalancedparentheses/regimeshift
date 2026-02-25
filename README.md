@@ -24,3 +24,8 @@ This project is for research and educational purposes only. Nothing here is inve
 ## Status
 
 Scaffold only. Implementation TBD.
+
+
+## References
+
+See `REFERENCES.md` for the research papers and reading list that motivate the signals.
