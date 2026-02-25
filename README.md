@@ -41,6 +41,106 @@ Scaffold only. Implementation TBD.
 - Positioning/flows (e.g., CFTC COT, ETF flows) as crowding/risk signals.
 - Funding stress spreads (e.g., SOFR-OIS, FRA-OIS, repo specials) as modern liquidity stress proxies.
 
+### Signals spec
+
+This section defines each planned signal, its data source, and a suggested normalization method.
+
+**Conventions**
+
+- `value`: raw measurement
+- `z`: z-score over a rolling window (default 3Y if daily, 5Y if weekly)
+- `pct`: percentile rank over a rolling window
+- `ema`: exponential moving average
+
+**Macro stress**
+
+- OFR Financial Stress Index (FSI)
+  - Source: OFR FSI daily series
+  - Raw: index level
+  - Normalize: `z`
+- St. Louis Fed Financial Stress Index (STLFSI)
+  - Source: FRED `STLFSI4`
+  - Raw: index level
+  - Normalize: `z`
+
+**Volatility regime**
+
+- VIX term structure slope
+  - Source: Cboe VIX futures curve
+  - Raw: front-month vs 3M or 6M futures slope
+  - Normalize: `z`
+- VIX option skew (Cboe SKEW)
+  - Source: Cboe SKEW index
+  - Raw: index level
+  - Normalize: `z`
+- MOVE index
+  - Source: ICE BofA MOVE
+  - Raw: index level
+  - Normalize: `z`
+- VVIX (vol-of-vol)
+  - Source: Cboe VVIX
+  - Raw: index level
+  - Normalize: `z`
+
+**Liquidity and funding stress**
+
+- Funding stress spreads
+  - Source: FRED (SOFR-OIS, FRA-OIS, repo specials)
+  - Raw: spread in bps
+  - Normalize: `z`
+- TED spread
+  - Source: FRED TED spread
+  - Raw: spread in bps
+  - Normalize: `z`
+- Liquidity proxy (Amihud)
+  - Source: price and volume data
+  - Raw: |return| / volume
+  - Normalize: `pct`
+- Order-book depth
+  - Source: exchange order book (when available)
+  - Raw: top-of-book or X% depth
+  - Normalize: `pct`
+
+**Credit and macro**
+
+- Credit spreads
+  - Source: FRED Baa-Aaa, HY-IG
+  - Raw: spread in bps
+  - Normalize: `z`
+- Yield curve / term premium
+  - Source: FRED (2s10s, 3m10y) or ACM term premium
+  - Raw: spread or term premium
+  - Normalize: `z`
+
+**Returns risk premia**
+
+- Variance risk premium (VRP)
+  - Source: implied variance (options) minus realized variance
+  - Raw: IV - RV
+  - Normalize: `z` and `pct`
+- Tail-risk premium (jump risk)
+  - Source: option-based jump/tail risk decomposition
+  - Raw: jump variance premium
+  - Normalize: `z`
+
+**Cross-asset structure**
+
+- Cross-asset correlation spike
+  - Source: rolling correlations (equity-credit, equity-rates, equity-commodities)
+  - Raw: correlation level or delta
+  - Normalize: `z`
+
+**Positioning and flows**
+
+- CFTC COT positioning
+  - Source: CFTC COT (net speculative positions)
+  - Raw: net position or z-scored net positioning
+  - Normalize: `z`
+- ETF flows
+  - Source: ETF flow data
+  - Raw: net flows as % AUM
+  - Normalize: `z`
+
 ## References
 
 ### Variance risk premium / tail-risk premia
