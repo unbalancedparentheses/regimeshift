@@ -34,6 +34,12 @@ Scaffold only. Implementation TBD.
 - MOVE index (bond market volatility) as a rates/credit stress signal.
 - Funding-liquidity stress proxies (e.g., TED spread / short-term funding spreads).
 - Liquidity/impact proxies (e.g., Amihud illiquidity, order-book depth when available).
+- Credit spreads (e.g., Baa-Aaa, HY-IG) as early stress signals.
+- Yield curve / term premium (e.g., 2s10s, 3m10y) as macro regime proxies.
+- Cross-asset correlation spikes as stress regime indicators.
+- Vol-of-vol (e.g., VVIX) as a volatility-regime transition signal.
+- Positioning/flows (e.g., CFTC COT, ETF flows) as crowding/risk signals.
+- Funding stress spreads (e.g., SOFR-OIS, FRA-OIS, repo specials) as modern liquidity stress proxies.
 
 ## References
 
