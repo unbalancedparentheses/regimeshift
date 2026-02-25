@@ -57,3 +57,13 @@ Scaffold only. Implementation TBD.
 ### Financial stress indices
 
 - Monin (2019). The OFR Financial Stress Index. Risks. https://www.mdpi.com/2227-9091/7/1/25
+
+### Regime-switching & macro regime signals
+
+- Cochrane, Piazzesi (2005). Bond risk premia. NBER Working Paper. https://www.nber.org/papers/w9178
+- Ang, Timmermann (2012). Regime changes and financial markets. NBER Working Paper. https://www.nber.org/papers/w17182
+- Ang, Bekaert (2004). How do regimes affect asset allocation? NBER Working Paper. https://www.nber.org/papers/w10080
+
+### Market structure & crash propagation
+
+- Menkveld, Yueshen (2022). The flash crash: The role of market fragmentation and high-frequency trading. https://ink.library.smu.edu.sg/lkcsb_research/7285/
