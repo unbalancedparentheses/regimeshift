@@ -141,6 +141,49 @@ This section defines each planned signal, its data source, and a suggested norma
   - Raw: net flows as % AUM
   - Normalize: `z`
 
+## Scoring (proposed)
+
+We combine normalized signals into a regime score in three steps:
+
+1. Normalize each signal to a common scale (`z` or `pct`).
+2. Aggregate into thematic buckets.
+3. Combine buckets into a single regime score, then map to labels.
+
+### Buckets
+
+Each bucket score is the mean of its member signals (after normalization).
+
+- **Risk premium**: VRP, tail-risk premium
+- **Liquidity**: funding spreads, TED, Amihud, order-book depth
+- **Volatility**: VIX slope, SKEW, MOVE, VVIX
+- **Credit/macro**: credit spreads, yield curve/term premium, stress indices
+- **Structure/flows**: cross-asset correlation, COT positioning, ETF flows
+
+### Regime score
+
+Let each bucket score be in z-space. Define:
+
+```
+regime_score = -0.30*risk_premium
+               -0.25*liquidity
+               -0.20*volatility
+               -0.15*credit_macro
+               -0.10*structure_flows
+```
+
+Negative weights mean higher stress → more risk-off. We can re-weight after backtesting.
+
+### Labels
+
+- `risk_on` if `regime_score >= +0.50`
+- `neutral` if `-0.50 < regime_score < +0.50`
+- `risk_off` if `regime_score <= -0.50`
+
+Also expose:
+
+- `confidence = min(1, |regime_score| / 2)`
+- `contributors`: top-3 buckets by absolute impact
+
 ## References
 
 ### Variance risk premium / tail-risk premia
