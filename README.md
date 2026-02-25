@@ -25,6 +25,22 @@ This project is for research and educational purposes only. Nothing here is inve
 
 Scaffold only. Implementation TBD.
 
+## Config and output schema
+
+- Example config: `config.example.toml`
+- Output schema: `signals.schema.json`
+- Sample output: `signals.sample.json`
+
+## Data availability
+
+Signal availability varies by source. A practical breakdown:
+
+- **Free / public**: FRED series (spreads, curve, stress indices), OFR FSI, NBER working papers.
+- **Often paid or restricted**: Cboe indices (VIX, VVIX, SKEW), ICE MOVE, ETF flow data, detailed order-book depth.
+- **Exchange-specific**: order-book depth (crypto/FX often easier than equities).
+
+This affects which signals are usable in an MVP vs a production system.
+
 
 ## Signals (planned)
 
@@ -231,3 +247,42 @@ Also expose:
 ### Market structure & crash propagation
 
 - Menkveld, Yueshen (2022). The flash crash: The role of market fragmentation and high-frequency trading. https://ink.library.smu.edu.sg/lkcsb_research/7285/
+
+## People to watch
+
+Researchers and groups to monitor for new papers in this space:
+
+- Didier Sornette
+- Jean-Philippe Bouchaud
+- Tim Bollerslev
+- George Tauchen
+- Hao Zhou
+- Viktor Todorov
+- Lai Xu
+- Geert Bekaert
+- Marie Hoerova
+- Markus Brunnermeier
+- Lasse Heje Pedersen
+- Lubos Pastor
+- Robert Stambaugh
+- Michael Flood
+- John Liechty
+- Krista Piontek
+- Phillip Monin
+- John Cochrane
+- Monika Piazzesi
+- Tobias Adrian
+- Richard Crump
+- Emanuel Moench
+- Simon Gilchrist
+- Egon Zakrajsek
+- Bence Toth
+- Yvan Lemperiere
+- Cecile Deremble
+- Jonathan Donier
+- Niklas Wheatley
+- Tobias Huber
+- Reppen
+- Gantner
+- Albert J. Menkveld
+- Yueshen Bian
