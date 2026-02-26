@@ -239,6 +239,7 @@ Signals are grouped into thematic families. Each entry lists the data source, ra
   - Raw: SOFR-OIS spread in bps
   - Normalize: `z`
   - Note: prefer SOFR-OIS over FRA-OIS for pure funding stress. FRA-OIS also embeds term premium and rate expectations, which can produce false signals during normal rate cycles. The FT documented this distortion during the 2018 Libor transition period.
+  - Note: SOFR uses daily compounding in arrears (backward-looking), unlike LIBOR's forward-looking panel estimates. This design amplifies real shocks mechanically — the Sept 2019 repo crisis produced a 12.5 bps one-day SOFR spike (8+ sigma for a benchmark rate). Interpret extreme SOFR-OIS spikes with awareness that they may reflect plumbing dysfunction rather than broad funding stress.
 - TED spread
   - Source: FRED `TEDRATE` (discontinued April 2022); substitute `TB3MS` minus `SOFR`
   - Raw: spread in bps
@@ -260,6 +261,11 @@ Signals are grouped into thematic families. Each entry lists the data source, ra
   - Source: exchange trade data or order book
   - Raw: signed order flow (buy-initiated minus sell-initiated volume), normalized by total volume
   - Normalize: `z`
+- Treasury realized vol / equity realized vol ratio
+  - Source: compute from daily returns of 2Y or 10Y Treasury vs. SPX
+  - Raw: ratio of rolling 21-day realized vol (Treasury) to rolling 21-day realized vol (equity)
+  - Normalize: `z`
+  - Note: normally well below 1.0. When Treasury realized vol exceeds equity vol, something structural is breaking — the "safe haven" is no longer safe. This inversion occurred in Aug 2019 (2Y Treasury realized vol ran at 2x equity vol) and during parts of the 2022 rate shock. Captures regime-relevant information that MOVE alone does not, because the ratio accounts for the relative magnitude rather than the absolute level.
 
 **Credit and macro**
 
@@ -342,6 +348,10 @@ Signals are grouped into thematic families. Each entry lists the data source, ra
   - Source: Baker-Bloom-Davis Economic Policy Uncertainty index or similar NLP pipeline
   - Raw: aggregate uncertainty or sentiment score
   - Normalize: `z`
+
+**Momentum / trend (future consideration)**
+
+Not currently a scored bucket, but cross-asset time-series momentum is a candidate for future inclusion. Jegadeesh-Titman (1993) established cross-sectional momentum; Moskowitz-Ooi-Pedersen (2012) showed time-series momentum earns its strongest returns during and after crisis periods. A simple signal: 12-1 month return on a diversified risk-asset basket turning negative is a regime warning. Trend-following strategies (Rattray et al. 2019) have positive convexity — they naturally profit during sustained regime transitions — making them both a signal source and an evaluation benchmark. Not prioritized for MVP because momentum is slow (monthly cadence) and the project already captures the faster signals that precede momentum turning negative.
 
 ## Algorithm details
 
@@ -562,6 +572,8 @@ Analytic gradient available. Optimize with L-BFGS-B. Bounds: μ > 0, α ≥ 0, �
 
 **Event definition:** VIX threshold crossings `VIX_t > VIX_{t-1} + 1.5·σ`, or large order flow imbalances. Estimate on 252-day rolling window. Rolling n approaching 1 is a warning signal.
 
+**Structured product mechanics as self-excitation:** The February 2018 Volmageddon event is a clean example of an endogenous Hawkes cascade. Inverse-VIX ETPs (XIV, SVXY) had a structural rebalancing rule: at end of day they must sell VIX futures proportional to any intraday VIX rise to maintain their inverse exposure. A moderate afternoon VIX spike triggered their selling, which pushed VIX higher, which triggered more selling — a textbook self-exciting process. The branching ratio briefly exceeded 1 before the products terminated. This dynamic can appear whenever large structured-product AUM has mechanical hedging rules tied to the same underlying, and it is distinct from fundamental-driven stress. Watch for unusual concentration of delta-hedging flows in VIX futures open interest as an early indicator.
+
 ## Scoring
 
 We combine normalized signals into a regime score in three steps:
@@ -575,10 +587,10 @@ We combine normalized signals into a regime score in three steps:
 Each bucket score is the mean of its member signals (after normalization).
 
 - **Risk premium**: VRP, tail-risk premium
-- **Liquidity**: funding spreads, TED, Amihud, order-book depth, order flow imbalance
+- **Liquidity**: funding spreads, TED, cross-currency basis, Amihud, order-book depth, order flow imbalance
 - **Volatility**: VIX slope, SKEW, MOVE, VVIX
-- **Credit/macro**: credit spreads, yield curve/term premium, stress indices
-- **Structure/flows**: cross-asset correlation, COT positioning, ETF flows
+- **Credit/macro**: credit spreads, EBP, yield curve/term premium, stress indices
+- **Structure/flows**: cross-asset correlation, price trend, COT positioning, ETF flows
 - **Contagion**: CoVaR, MES, SRISK
 - **Sentiment**: FOMC tone, news-based uncertainty
 
@@ -655,7 +667,7 @@ A regime signal is only useful if it predicts something. Candidate target variab
 
 - **Forward drawdown**: does a risk-off reading predict above-average drawdown in the next 1–4 weeks?
 - **Sharpe ratio by regime**: is realized Sharpe higher in risk-on periods and lower or negative in risk-off?
-- **Crisis coincidence**: do known stress episodes (2008, 2011 EU crisis, 2020 COVID, 2022 rate shock) register as risk-off before or during the event?
+- **Crisis coincidence**: do known stress episodes (2008, 2011 EU crisis, Feb 2018 Volmageddon, Sept 2019 repo crisis, 2020 COVID, 2022 rate shock) register as risk-off before or during the event? The single-bucket events (2018 vol-only, 2019 liquidity-only) are especially useful: do they produce brief, low-confidence risk-off from the correct bucket?
 
 ### Evaluation approach
 
@@ -663,7 +675,8 @@ A regime signal is only useful if it predicts something. Candidate target variab
 2. Compute forward returns and drawdowns conditional on each regime label.
 3. Check calibration: does `confidence` correlate with realized severity?
 4. Backtest a simple rule: hold equities in risk-on, hold cash/bonds in risk-off. Compare Sharpe and max drawdown to buy-and-hold and to a simple 12-1 time-series momentum strategy — the latter is a stronger benchmark since it also captures regime dynamics.
-5. Re-weight bucket coefficients to maximize out-of-sample Sharpe using a held-out period.
+5. Backtest regime-aware rebalancing: use regime signal to delay rebalancing a 60/40 portfolio during risk-off (Rattray et al. 2019 show mechanical rebalancing has hidden negative convexity — it forces buying losers during trending drawdowns, amplifying max drawdown by ~5pp vs. buy-and-hold in 2008). Compare against: (a) monthly-rebalanced 60/40, (b) buy-and-hold 60/40, and (c) 60/40 with a 10% trend-following overlay (the positive convexity of trend offsets the negative convexity of rebalancing).
+6. Re-weight bucket coefficients to maximize out-of-sample Sharpe using a held-out period.
 
 **Overfitting warning:** with 7 buckets and ~20 underlying signals, re-weighting on historical data will overfit unless disciplined. Recommended approach: (a) use a long out-of-sample period (at least 10 years held out); (b) constrain weights to be positive and sum to 1; (c) prefer equal weighting as baseline and treat optimized weights with skepticism unless improvement is large and stable across sub-periods.
 
@@ -682,16 +695,16 @@ In the scoring formula, fast signals should dominate for short-horizon regime ca
 
 These are sanity checks, not backtests: does each signal move in the expected direction during known episodes? Use this table to validate signal implementations before running a full evaluation.
 
-| Signal | Sept 2008 (Lehman) | Mar 2020 (COVID) | Feb 2018 (Volmageddon) | 2022 (rate shock) | 2013 (Taper Tantrum) |
-|--------|---------------------|------------------|------------------------|-------------------|----------------------|
-| VIX | ~80 (extreme) | ~85 (extreme) | ~14 → ~37 (one day) | ~35 (elevated) | ~21 (moderate) |
-| HY OAS | >1000 bps | ~1000 bps | ~330 bps (tight) | ~600 bps | ~500 bps |
-| 10Y-2Y | steepening (flight to safety) | steep | normal | deeply inverted | flattening |
-| SOFR-OIS / TED | ~450 bps | ~50 bps | unchanged | ~20 bps | ~15 bps |
-| VRP | negative (RV >> IV) | near-zero → negative | brief inversion, then recovered | positive, elevated | positive |
-| Cross-asset λ_frac | near 1.0 | near 1.0 | brief spike, equities only | moderate | low-moderate |
-| STLFSI | extreme (+4 to +6) | extreme (+5) | negligible | moderate (+1) | mild |
-| **Expected regime** | **risk-off** | **risk-off** | **brief risk-off, rapid reversion** | **neutral to risk-off** | **neutral** |
+| Signal | Sept 2008 (Lehman) | Mar 2020 (COVID) | Sept 2019 (repo crisis) | Feb 2018 (Volmageddon) | 2022 (rate shock) | 2013 (Taper Tantrum) |
+|--------|---------------------|------------------|--------------------------|------------------------|-------------------|----------------------|
+| VIX | ~80 (extreme) | ~85 (extreme) | ~18 (calm) | ~14 → ~37 (one day) | ~35 (elevated) | ~21 (moderate) |
+| HY OAS | >1000 bps | ~1000 bps | ~400 bps (normal) | ~330 bps (tight) | ~600 bps | ~500 bps |
+| 10Y-2Y | steepening (flight to safety) | steep | flat/inverted | normal | deeply inverted | flattening |
+| SOFR-OIS / TED | ~450 bps | ~50 bps | overnight repo hit 600 bps | unchanged | ~20 bps | ~15 bps |
+| VRP | negative (RV >> IV) | near-zero → negative | normal | brief inversion, then recovered | positive, elevated | positive |
+| Cross-asset λ_frac | near 1.0 | near 1.0 | low | brief spike, equities only | moderate | low-moderate |
+| STLFSI | extreme (+4 to +6) | extreme (+5) | mild | negligible | moderate (+1) | mild |
+| **Expected regime** | **risk-off** | **risk-off** | **brief risk-off (liquidity only)** | **brief risk-off, rapid reversion** | **neutral to risk-off** | **neutral** |
 
 Key observations:
 
@@ -700,6 +713,7 @@ Key observations:
 - **2022** was a structural rate normalization, not a credit crisis. Credit spreads widened but not to crisis levels; funding stress (SOFR-OIS) stayed contained; VIX peaked around 35. The model should give moderate risk-off, not extreme — a useful check that the model doesn't over-react to rate moves alone.
 - **2013 Taper Tantrum** was a brief false alarm: a rate spike reversed once the Fed signaled patience. Useful test case for signal decay and mean-reversion; the model should not stay risk-off for more than a few weeks.
 - **VRP goes negative in acute crises** (2008, early 2020) because realized vol spikes faster than options reprice. Treat negative VRP as a stress signal in the regime context, not a contrarian buy signal.
+- **Sept 2019 repo crisis** is the mirror image of Volmageddon: only the liquidity/funding bucket fires. Overnight repo rates hit 600 bps — the largest dislocation since 2008 — but VIX, credit spreads, and equity markets barely reacted. Caused by a structural reserve shortage (QT pushed bank reserves to the regulatory floor) colliding with corporate tax day and large Treasury settlement. The model should produce a brief, low-confidence risk-off driven entirely by the liquidity bucket. Also a key test of the SOFR-OIS signal: SOFR spiked ~12.5 bps in one day (an 8+ sigma event for a benchmark rate), demonstrating that SOFR's daily-compounding-in-arrears design can amplify mechanical shocks beyond what fundamentals justify.
 - **Funding stress distinguishes 2008 from 2020**: the 2008 interbank market seized (TED ~450 bps); in 2020 the Fed intervened within days and funding spreads stayed contained relative to equity vol. This asymmetry is important for the liquidity bucket and confirms that no single bucket should dominate the regime call.
 
 ## Implementation notes
@@ -848,6 +862,7 @@ signals:
 - Pastor, Stambaugh (2003). Liquidity Risk and Expected Stock Returns. Journal of Political Economy (see NBER working paper page). https://www.nber.org/papers/w8462
 - Han, Leika (2019). Integrating Solvency and Liquidity Stress Tests: The Use of Markov Regime-Switching Models. IMF Working Paper 2019/250. https://www.imf.org/en/publications/wp/issues/2019/11/15/integrating-solvency-and-liquidity-stress-tests-the-use-of-markov-regime-switching-models-48752
 - Flood, Liechty, Piontek (2015). Systemwide Commonalities in Market Liquidity. OFR Working Paper. https://www.financialresearch.gov/working-papers/2015/05/28/systemwide-commonalities-in-market-liquidity/
+- Financial Times (2018). Do not trust the FRA-OIS spread! https://www.ft.com/content/5b0198fe-3035-3104-8262-c9723b96eb90 — argues FRA-OIS embeds term premium and rate expectations beyond pure funding stress; relevant caveat for SOFR-OIS vs. FRA-OIS signal choice.
 
 ### Liquidity criticality / impact
 
@@ -888,6 +903,7 @@ signals:
 ### Market structure & crash propagation
 
 - Menkveld, Yueshen (2022). The flash crash: The role of market fragmentation and high-frequency trading. https://ink.library.smu.edu.sg/lkcsb_research/7285/
+- Six Figure Investing (2019). What caused the February 5th, 2018 volatility spike / XIV termination. https://www.sixfigureinvesting.com/2019/02/what-caused-the-february-5th-2018-volatility-spike-xiv-termination/ — anatomy of Volmageddon: forced rebalancing of inverse-vol ETPs caused a +116% VIX spike on a -4.1% SPX day. Four contributing factors: flawed daily-rebalancing architecture, historical complacency, $5B asset accumulation in a $7B VIX futures market, and self-reinforcing liquidity exhaustion at settlement.
 
 ### Critical slowing down and tipping points
 
@@ -936,15 +952,23 @@ signals:
 - Calvo (1998). Capital flows and capital-market crises: the simple economics of sudden stops. Journal of Applied Economics. https://doi.org/10.1080/15140326.1998.12040516
 - Forbes, Rigobon (2002). No contagion, only interdependence: measuring stock market comovements. Journal of Finance. https://doi.org/10.1111/0022-1082.00494
 
-### Momentum and trend
+### Momentum, trend, and rebalancing
 
 - Jegadeesh, Titman (1993). Returns to buying winners and selling losers: implications for stock market efficiency. Journal of Finance. https://doi.org/10.1111/j.1540-6261.1993.tb04702.x — foundational cross-sectional momentum paper; positive momentum across risk assets is a risk-on indicator.
 - Moskowitz, Ooi, Pedersen (2012). Time series momentum. Journal of Financial Economics. https://doi.org/10.1016/j.jfineco.2011.11.003 — time-series momentum earns its strongest returns during and after crisis periods; trend-following is a natural benchmark for regime-aware strategies.
+- Rattray, Granger, Harvey, Van Hemert (2019). Strategic rebalancing. Journal of Portfolio Management. https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3330134 — mechanical rebalancing is economically a short straddle (negative convexity); using trend signals to delay rebalancing during drawdowns improves crisis performance by 2–5pp. Motivates regime-aware rebalancing as an evaluation benchmark.
 
 ### Text and sentiment
 
 - Loughran, McDonald (2011). When is a liability not a liability? Textual analysis, dictionaries, and 10-Ks. Journal of Finance. https://doi.org/10.1111/j.1540-6261.2010.01625.x — foundational financial NLP sentiment dictionary; general-purpose dictionaries (Harvard IV-4) misclassify common financial terms.
 - Baker, Bloom, Davis (2016). Measuring economic policy uncertainty. Quarterly Journal of Economics. https://doi.org/10.1093/qje/qjw024
+
+### Practitioner commentary and case studies
+
+- Monday Morning Macro (2019). Impossible events are on the rise. https://monday-morning-macro.com/2019/08/19/impossible-events-are-on-the-rise/ — documents 4-sigma Treasury moves occurring far more frequently than VaR models predict; observation that HY credit lags other asset classes in repricing vol is a potential divergence signal.
+- Monday Morning Macro (2019). Two year trouble. https://monday-morning-macro.com/2019/08/27/two-year-trouble/ — front-end Treasury realized vol exceeding equity vol, asset swap spreads at 20-year lows; motivates Treasury/equity realized vol ratio as a stress signal.
+- Monday Morning Macro (2019). Far too little, far too late. https://monday-morning-macro.com/2019/09/17/far-too-little-far-too-late/ — anatomy of the Sept 2019 repo crisis: overnight repo hit 600 bps, structural reserve shortage from QT, Fed response inadequate. Key calibration episode for the liquidity/funding bucket.
+- Monday Morning Macro (2019). The great LIBOR liquidation. https://monday-morning-macro.com/2019/09/24/the-great-libor-liquidation/ — LIBOR-to-SOFR transition risks; SOFR's daily-compounding-in-arrears design produced an 8+ sigma spike during Sept 2019 repo stress; design flaw implications for using SOFR-OIS as a benchmark stress signal.
 
 ## People to watch
 
@@ -966,6 +990,7 @@ Researchers and groups to monitor for new papers in this space.
 - **Francis X. Diebold** — realized volatility (with Andersen, Bollerslev); forecast evaluation; DY connectedness
 - **Caio Almeida** — model-free tail risk measures from options; term structure
 - **Yacine Aït-Sahalia** — jumps in equity prices; nonparametric high-frequency methods; VRP
+- **Vineer Bhansali** — tail risk hedging as offensive risk management; monetization timing of tail hedges; performance measurement for asymmetric payoff strategies
 
 ### Fat tails, power laws, and crash hazard
 
