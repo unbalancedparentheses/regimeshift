@@ -108,6 +108,11 @@ VIX, VVIX, SKEW historical data: https://www.cboe.com/tradable_products/vix/vix_
 VIX futures settlement prices (for term structure): https://www.cboe.com/products/vix-index-volatility/vix-options-and-futures/vix-futures/vix-futures-historical-data/
 Note: Cboe data is free for personal/research use but has redistribution restrictions.
 
+### CFTC COT data
+
+Weekly Commitments of Traders reports: https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm
+Published every Friday for positions as of the prior Tuesday (3-day lag). Download as CSV or use the CFTC API. Key fields: net speculative positions (large traders, non-commercial) for equity index, Treasury, and commodity futures.
+
 ## Theoretical frameworks
 
 Different schools offer distinct explanations of what a regime is and how transitions occur. Understanding the tension between them is important: this project draws on all of them, but they are not always compatible.
@@ -135,6 +140,12 @@ Realized volatility has a Hurst exponent H ≈ 0.1, far below 0.5. Volatility is
 ### Intermediary asset pricing (Adrian, Shin, He, Krishnamurthy)
 
 Leverage and balance-sheet constraints of financial intermediaries drive risk premia and liquidity. When intermediary capital is scarce, risk premia spike and liquidity dries up simultaneously — a defining signature of risk-off regimes. Provides a unified micro-foundation for why credit spreads, VRP, and funding stress co-move at regime transitions, something neither Hamilton nor Sornette explains directly.
+
+### Minsky's Financial Instability Hypothesis
+
+Hyman Minsky argued that stability is destabilizing: long periods of calm encourage risk-taking, leverage, and the migration of borrowers from hedge finance (cash flows cover debt service) to speculative finance (cash flows cover only interest) to Ponzi finance (cash flows cover neither — survival depends on asset appreciation). This endogenous build-up of fragility eventually collapses under its own weight.
+
+This is the conceptual precursor to Brunnermeier's funding liquidity spirals and Geanakoplos's leverage cycle. Minsky's framework suggests that regime-shift risk is highest after extended periods of low volatility and tight credit spreads — precisely when most models signal calm. Practically: low VRP, compressed credit spreads, and rising leverage ratios together are a Minsky-style warning even when no individual signal crosses a threshold.
 
 ### Financial network contagion (Acemoglu, Ozdaglar, Elliott, Golub, Jackson)
 
@@ -284,6 +295,45 @@ This section defines each planned signal, its data source, and a suggested norma
 ## Algorithm details
 
 Computation details for each major signal type. All formulas use log returns `r_t = ln(P_t / P_{t-1})`.
+
+### VIX term structure slope
+
+VIX futures settle monthly on the Wednesday 30 days before the standard monthly SPX expiration. Download settlement prices from Cboe (see Data sources).
+
+```
+# Label futures by days to expiration (DTE)
+front_month_vix  = settlement price of nearest contract (DTE < 30)
+second_month_vix = settlement price of next contract
+
+# Roll-adjusted slope (interpolate to fixed 30-day tenor)
+w = DTE_front / 30
+constant_maturity_30d = w * front_month_vix + (1 - w) * second_month_vix
+
+# Term structure slope
+slope_t = VIX9D - VIX3M   # short end vs. 3-month (if available)
+       OR = front_month_vix - second_month_vix   # front vs. second month
+```
+
+Interpretation: negative slope (backwardation) = near-term fear exceeds medium-term = stress. Positive slope (contango) = normal carry. Normalize with `z`.
+
+### Cross-asset correlation eigenvalue
+
+The largest eigenvalue of the rolling cross-asset correlation matrix measures systemic co-movement. When it rises sharply, diversification breaks down — a signature of stress regimes.
+
+```
+# Assets: equity (SPX), credit (HY spread), rates (10Y yield), commodities (e.g., oil)
+# Build rolling correlation matrix C_t from W-day returns of each asset class
+
+C_t = rolling_correlation_matrix([equity, credit, rates, commodities], window=W)
+
+# Largest eigenvalue via power iteration or full eigen decomposition
+λ_max_t = max eigenvalue of C_t
+
+# Fraction of variance explained (normalized)
+λ_frac_t = λ_max_t / sum(eigenvalues of C_t)   # = λ_max / n_assets at perfect correlation
+```
+
+Default W = 63 days. λ_frac approaching 1.0 means all assets moving together — crisis regime. Normalize λ_frac with `z`. Also apply critical slowing down (rising variance + AR(1)) to λ_frac itself as an early warning.
 
 ### Realized variance
 
@@ -451,6 +501,8 @@ regime_score = -0.25*risk_premium
 
 Negative weights mean higher stress → more risk-off. Weights are a starting point; re-weight after backtesting.
 
+**Note on VRP sign:** The risk_premium bucket includes VRP with a negative weight, so high VRP → more risk-off. This is defensible for real-time regime detection — high VRP reflects fear and variance demand — but the Bollerslev et al. (2009) literature frames high VRP as a *positive* forward return predictor (risk-on). These are not contradictory: high VRP can simultaneously signal current fear and predict future recovery. Be aware of this dual interpretation when evaluating the model.
+
 ### Labels
 
 - `risk_on` if `regime_score >= +0.50`
@@ -479,6 +531,8 @@ A regime signal is only useful if it predicts something. Candidate target variab
 3. Check calibration: does `confidence` correlate with realized severity?
 4. Backtest a simple rule: hold equities in risk-on, hold cash/bonds in risk-off. Compare Sharpe and max drawdown to buy-and-hold.
 5. Re-weight bucket coefficients to maximize out-of-sample Sharpe using a held-out period.
+
+**Overfitting warning:** with 7 buckets and ~20 underlying signals, re-weighting on historical data will overfit unless disciplined. Recommended approach: (a) use a long out-of-sample period (at least 10 years held out); (b) constrain weights to be positive and sum to 1; (c) prefer equal weighting as baseline and treat optimized weights with skepticism unless improvement is large and stable across sub-periods.
 
 ### Signal lead/lag properties
 
