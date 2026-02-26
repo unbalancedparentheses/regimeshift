@@ -250,6 +250,11 @@ Signals are grouped into thematic families. Each entry lists the data source, ra
   - Source: exchange order book (when available)
   - Raw: top-of-book or X% depth
   - Normalize: `pct`
+- Cross-currency basis (xccy basis)
+  - Source: Bloomberg or derived from FX forwards and OIS rates (no free equivalent)
+  - Raw: deviation from covered interest rate parity, e.g., USD/EUR 3-month basis in bps
+  - Normalize: `z`
+  - Note: a negative USD basis means dollar funding via FX swaps is more expensive than via the interbank market — a sign of global dollar shortage. Captures international stress that domestic SOFR-OIS misses. Fired in 2008, 2011 EU crisis, and March 2020.
 - Order flow imbalance
   - Source: exchange trade data or order book
   - Raw: signed order flow (buy-initiated minus sell-initiated volume), normalized by total volume
@@ -261,6 +266,11 @@ Signals are grouped into thematic families. Each entry lists the data source, ra
   - Source: FRED `BAMLH0A0HYM2` (HY OAS), `BAMLC0A4CBBB` (BBB OAS), `BAA`-`AAA` (Moody's)
   - Raw: spread in bps
   - Normalize: `z`
+- Excess bond premium (EBP)
+  - Source: Gilchrist-Zakrajsek data file from Federal Reserve: https://www.federalreserve.gov/econres/feds/updating-the-recession-risk-and-the-excess-bond-premium.htm
+  - Raw: residual corporate spread after removing the component explained by firm-level default risk (leverage, volatility, interest coverage)
+  - Normalize: `z`
+  - Note: EBP is the most predictive component of the GZ credit spread for recessions. When it rises, financial conditions are tightening purely from risk appetite compression — independent of actual default risk. Strictly more informative than the raw spread for regime detection.
 - Yield curve / term premium
   - Source: FRED `T10Y2Y` (2s10s), `T10Y3M` (3m10y); ACM term premium from NY Fed
   - Raw: spread or term premium
@@ -779,11 +789,36 @@ Scaffold only. Implementation TBD.
 - `python/` — optional ML/AI experiments when Rust is not ideal.
 - `data/` — optional cached datasets or example fixtures.
 
-### Config and output schema
+### Config
 
-- Example config: `config.example.toml`
-- Output schema: `signals.schema.json`
-- Sample output: `signals.sample.json`
+Example config: `config.example.toml` — covers API keys, rolling window lengths, thresholds, and smoothing parameters.
+
+### Output
+
+Each observation emits one record:
+
+```
+date          : ISO 8601 date
+regime        : "risk_on" | "neutral" | "risk_off"
+score         : float  # smoothed regime score
+confidence    : float  # in [0, 1]
+buckets:
+  risk_premium  : float | null
+  liquidity     : float | null
+  volatility    : float | null
+  credit_macro  : float | null
+  structure_flows: float | null
+  contagion     : float | null
+  sentiment     : float | null
+signals:
+  vrp           : float | null
+  hy_oas        : float | null
+  ebp           : float | null
+  vix_slope     : float | null
+  # ... one entry per signal
+```
+
+`null` means the signal was unavailable or in warmup. See `signals.sample.json` for a concrete example.
 
 ## References
 
