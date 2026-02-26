@@ -580,7 +580,7 @@ regime_score = -0.25*risk_premium
                -0.05*sentiment
 ```
 
-Negative weights mean higher stress → more risk-off. Weights are a starting point; re-weight after backtesting.
+Negative weights mean higher stress → more risk-off. These weights are illustrative priors, not calibrated values. Equal weights (1/7 ≈ 0.14 each) are a defensible null hypothesis and the right baseline before you have data to justify departing from them.
 
 **Note on VRP sign:** The risk_premium bucket includes VRP with a negative weight, so high VRP → more risk-off. This is defensible for real-time regime detection — high VRP reflects fear and variance demand — but the Bollerslev et al. (2009) literature frames high VRP as a *positive* forward return predictor (risk-on). These are not contradictory: high VRP can simultaneously signal current fear and predict future recovery. Be aware of this dual interpretation when evaluating the model.
 
@@ -625,6 +625,29 @@ Signals differ in how quickly they react to regime transitions. A rough taxonomy
 - **Potentially leading**: critical slowing down indicators (rising variance + autocorrelation), LPPL fit, branching ratio from Hawkes model
 
 In the scoring formula, fast signals should dominate for short-horizon regime calls; slower signals provide structural context.
+
+### Historical calibration examples
+
+These are sanity checks, not backtests: does each signal move in the expected direction during known episodes? Use this table to validate signal implementations before running a full evaluation.
+
+| Signal | Sept 2008 (Lehman) | Mar 2020 (COVID) | 2022 (rate shock) | 2013 (Taper Tantrum) |
+|--------|---------------------|------------------|-------------------|----------------------|
+| VIX | ~80 (extreme) | ~85 (extreme) | ~35 (elevated) | ~21 (moderate) |
+| HY OAS | >1000 bps | ~1000 bps | ~600 bps | ~500 bps |
+| 10Y-2Y | steepening (flight to safety) | steep | deeply inverted | flattening |
+| SOFR-OIS / TED | ~450 bps | ~50 bps | ~20 bps | ~15 bps |
+| VRP | negative (RV >> IV) | near-zero → negative | positive, elevated | positive |
+| Cross-asset λ_frac | near 1.0 | near 1.0 | moderate | low-moderate |
+| STLFSI | extreme (+4 to +6) | extreme (+5) | moderate (+1) | mild |
+| **Expected regime** | **risk-off** | **risk-off** | **neutral to risk-off** | **neutral** |
+
+Key observations:
+
+- **2008 and 2020** are both unambiguous: all signal families fire simultaneously. The model should give high-confidence risk-off with no ambiguity across buckets.
+- **2022** was a structural rate normalization, not a credit crisis. Credit spreads widened but not to crisis levels; funding stress (SOFR-OIS) stayed contained; VIX peaked around 35. The model should give moderate risk-off, not extreme — a useful check that the model doesn't over-react to rate moves alone.
+- **2013 Taper Tantrum** was a brief false alarm: a rate spike reversed once the Fed signaled patience. Useful test case for signal decay and mean-reversion; the model should not stay risk-off for more than a few weeks.
+- **VRP goes negative in acute crises** (2008, early 2020) because realized vol spikes faster than options reprice. Treat negative VRP as a stress signal in the regime context, not a contrarian buy signal.
+- **Funding stress distinguishes 2008 from 2020**: the 2008 interbank market seized (TED ~450 bps); in 2020 the Fed intervened within days and funding spreads stayed contained relative to equity vol. This asymmetry is important for the liquidity bucket and confirms that no single bucket should dominate the regime call.
 
 ## Implementation notes
 
