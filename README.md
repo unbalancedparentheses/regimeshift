@@ -566,6 +566,8 @@ Each bucket score is the mean of its member signals (after normalization).
 - **Contagion**: CoVaR, MES, SRISK
 - **Sentiment**: FOMC tone, news-based uncertainty
 
+**Signal correlation within buckets:** Signals in the same bucket are often highly correlated — VIX slope, SKEW, MOVE, and VVIX typically co-move; HY OAS and BBB OAS move together. Simple averaging treats them as independent and implicitly double-counts the same underlying factor. Three options: (a) pick the single most reliable signal per bucket and use it directly — simplest and works for an MVP; (b) apply PCA within each bucket and use the first principal component; (c) down-weight any pair with rolling pairwise correlation above 0.8. Start with option (a).
+
 ### Regime score
 
 Let each bucket score be in z-space. Define:
@@ -582,6 +584,14 @@ regime_score = -0.25*risk_premium
 
 Negative weights mean higher stress → more risk-off. These weights are illustrative priors, not calibrated values. Equal weights (1/7 ≈ 0.14 each) are a defensible null hypothesis and the right baseline before you have data to justify departing from them.
 
+**Bucket renormalization when data is missing:** If one or more buckets are NaN, renormalize the remaining weights to sum to 1 before computing the score — otherwise the score is systematically biased toward zero whenever buckets drop out:
+
+```
+available = [(w, b) for (w, b) in weights_and_buckets if bucket b is not NaN]
+weight_sum = sum(w for w, _ in available)
+regime_score = sum(-w / weight_sum * b for w, b in available)
+```
+
 **Note on VRP sign:** The risk_premium bucket includes VRP with a negative weight, so high VRP → more risk-off. This is defensible for real-time regime detection — high VRP reflects fear and variance demand — but the Bollerslev et al. (2009) literature frames high VRP as a *positive* forward return predictor (risk-on). These are not contradictory: high VRP can simultaneously signal current fear and predict future recovery. Be aware of this dual interpretation when evaluating the model.
 
 ### Labels
@@ -594,6 +604,32 @@ Also expose:
 
 - `confidence = min(1, |regime_score| / 2)`
 - `contributors`: top-3 buckets by absolute impact
+
+### Regime persistence
+
+Raw thresholds applied to the regime score produce noisy label switching when the score hovers near ±0.50. Three practical approaches, in order of increasing complexity:
+
+**1. Exponential smoothing** (recommended starting point):
+```
+score_smooth_t = α * regime_score_t + (1 - α) * score_smooth_{t-1}
+```
+Apply threshold rules to `score_smooth` instead of the raw score. α = 0.1 gives a ~10-day half-life (slow, suited to weekly-cadence signals); α = 0.3 gives a ~2-day half-life (faster response). One parameter, easy to reason about.
+
+**2. Minimum duration (confirmation):**
+Only flip the label when the candidate regime has held for N consecutive days. N = 5 (one week) prevents transient spikes from triggering transitions. Drawback: adds lag at genuine turning points.
+
+**3. Hysteresis bands:**
+Use asymmetric thresholds — a tighter band to stay in a regime than to enter it:
+```
+Enter risk-off:  score_smooth < -0.75
+Exit risk-off:   score_smooth > -0.25
+Enter risk-on:   score_smooth > +0.75
+Exit risk-on:    score_smooth < +0.25
+Neutral:         all else
+```
+Most robust against noise but requires four threshold parameters.
+
+Start with option 1 (α = 0.2). This eliminates most flip-flopping with a single parameter and minimal lag cost.
 
 ## Evaluation
 
