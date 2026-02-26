@@ -31,7 +31,7 @@ Scaffold only. Implementation TBD.
 - Output schema: `signals.schema.json`
 - Sample output: `signals.sample.json`
 
-## Data availability
+## Data sources
 
 Signal availability varies by source. A practical breakdown:
 
@@ -40,6 +40,49 @@ Signal availability varies by source. A practical breakdown:
 - **Exchange-specific**: order-book depth (crypto/FX often easier than equities).
 
 This affects which signals are usable in an MVP vs a production system.
+
+### FRED API
+
+Base URL: `https://api.stlouisfed.org/fred/series/observations`
+Required params: `series_id`, `api_key`, `file_type=json`
+Free API key: https://fred.stlouisfed.org/docs/api/api_key.html
+
+Key series IDs:
+
+| Signal | FRED ID | Frequency | Notes |
+|--------|---------|-----------|-------|
+| St. Louis FSI | `STLFSI4` | Weekly | Released Friday |
+| VIX | `VIXCLS` | Daily | Cboe; redistribution restrictions apply |
+| HY spread (OAS) | `BAMLH0A0HYM2` | Daily | ICE BofA US High Yield |
+| IG spread (BBB OAS) | `BAMLC0A4CBBB` | Daily | ICE BofA BBB |
+| IG spread (AAA OAS) | `BAMLC0A1CAAA` | Daily | ICE BofA AAA |
+| Baa yield | `BAA` | Daily | Moody's; use BAA-AAA for spread |
+| Aaa yield | `AAA` | Daily | Moody's |
+| 10Y-2Y curve | `T10Y2Y` | Daily | |
+| 10Y-3M curve | `T10Y3M` | Daily | Better recession predictor |
+| SOFR | `SOFR` | Daily | Replaced LIBOR |
+| Fed funds rate | `DFF` | Daily | |
+| NBER recession | `USREC` | Monthly | 1=recession; useful for validation |
+| EPU index | `USEPUINDXD` | Daily | Baker-Bloom-Davis uncertainty |
+
+Note: TED spread (`TEDRATE`) was discontinued April 2022. Substitute: 3-month T-bill vs. SOFR.
+
+### OFR Financial Stress Index
+
+API: `https://dev.financialresearch.gov/`
+CSV download: https://www.financialresearch.gov/financial-stress-index/
+Daily series, ~1 business day lag.
+
+### ACM term premium
+
+Download from NY Fed: https://www.newyorkfed.org/research/data_indicators/term-premia-on-interest-rates
+Monthly CSV. Series: `ACMTP10` (10-year term premium).
+
+### Cboe indices
+
+VIX, VVIX, SKEW historical data: https://www.cboe.com/tradable_products/vix/vix_historical_data/
+VIX futures settlement prices (for term structure): https://www.cboe.com/products/vix-index-volatility/vix-options-and-futures/vix-futures/vix-futures-historical-data/
+Note: Cboe data is free for personal/research use but has redistribution restrictions.
 
 ## Theoretical frameworks
 
@@ -117,11 +160,11 @@ This section defines each planned signal, its data source, and a suggested norma
 **Liquidity and funding stress**
 
 - Funding stress spreads
-  - Source: FRED (SOFR-OIS, FRA-OIS, repo specials)
-  - Raw: spread in bps
+  - Source: FRED `SOFR`, `DFF` (fed funds); OIS from Bloomberg/ICE (paid)
+  - Raw: SOFR-OIS spread in bps
   - Normalize: `z`
 - TED spread
-  - Source: FRED TED spread
+  - Source: FRED `TEDRATE` (discontinued April 2022); substitute `TB3MS` minus `SOFR`
   - Raw: spread in bps
   - Normalize: `z`
 - Liquidity proxy (Amihud)
@@ -140,11 +183,11 @@ This section defines each planned signal, its data source, and a suggested norma
 **Credit and macro**
 
 - Credit spreads
-  - Source: FRED Baa-Aaa, HY-IG
+  - Source: FRED `BAMLH0A0HYM2` (HY OAS), `BAMLC0A4CBBB` (BBB OAS), `BAA`-`AAA` (Moody's)
   - Raw: spread in bps
   - Normalize: `z`
 - Yield curve / term premium
-  - Source: FRED (2s10s, 3m10y) or ACM term premium
+  - Source: FRED `T10Y2Y` (2s10s), `T10Y3M` (3m10y); ACM term premium from NY Fed
   - Raw: spread or term premium
   - Normalize: `z`
 
@@ -202,6 +245,140 @@ This section defines each planned signal, its data source, and a suggested norma
   - Source: Baker-Bloom-Davis Economic Policy Uncertainty index or similar NLP pipeline
   - Raw: aggregate uncertainty or sentiment score
   - Normalize: `z`
+
+## Algorithm details
+
+Computation details for each major signal type. All formulas use log returns `r_t = ln(P_t / P_{t-1})`.
+
+### Realized variance
+
+From daily returns (simplest):
+```
+RV_t = (252 / W) * Σ_{i=t-W+1}^{t} r_i²
+```
+Default W = 21 (monthly), 63 (quarterly). The factor 252 annualizes.
+
+Parkinson estimator (from OHLC, no intraday data needed, more efficient):
+```
+RV_Park_t = (252 / (4·ln2·W)) * Σ_{i=t-W+1}^{t} (ln(H_i / L_i))²
+```
+
+Garman-Klass estimator (most efficient from OHLC):
+```
+GK_i = 0.5·(ln(H_i/L_i))² - (2·ln2 - 1)·(ln(Close_i/Open_i))²
+RV_GK_t = 252 * (1/W) * Σ GK_i
+```
+
+From high-frequency (5-min) returns (preferred when available):
+```
+RV_HF_t = Σ_{i=1}^{M} r_{t,i}²   [M ≈ 78 per day for US equities]
+```
+Apply realized kernel or pre-averaging correction for microstructure noise (Barndorff-Nielsen, Hansen, Lunde, Shephard).
+
+### Variance risk premium (VRP)
+
+```
+IV_t      = (VIX_t / 100)²           # annualized implied variance
+IV_monthly = IV_t / 12               # monthly implied variance
+RV_monthly = (252 / 21) * Σ_{i=t-20}^{t} r_i²
+VRP_t     = IV_monthly - RV_monthly
+```
+
+VRP > 0: investors paying for variance protection (normal).
+VRP < 0: realized vol exceeds implied vol (already stressed).
+High positive VRP predicts positive equity returns at quarterly horizon (Bollerslev, Tauchen, Zhou 2009).
+
+### Rolling z-score
+
+```
+μ_{t,W} = mean(x_{t-W+1} .. x_t)
+σ_{t,W} = std(x_{t-W+1} .. x_t)   # sample std, ddof=1
+z_t     = clip((x_t - μ_{t,W}) / σ_{t,W}, -4, 4)
+```
+
+Parameters: W = 756 days (3Y daily) or 260 weeks (5Y weekly). Require min 63 observations before emitting. Clip to ±4 to limit outlier influence. For highly skewed series (Amihud, depth), log-transform before z-scoring.
+
+### Rolling percentile rank
+
+```
+pct_t = rank(x_t in {x_{t-W+1} .. x_t}) / W
+```
+Equivalent to empirical CDF at x_t over rolling window. Require min 126 observations.
+
+### Amihud illiquidity
+
+```
+ILLIQ_t = (1/W) * Σ_{i=t-W+1}^{t} |r_i| / DollarVolume_i
+```
+Log-transform before normalizing: `log(ILLIQ_t)` is more Gaussian. Normalize with `pct`.
+
+### Hamilton filter (2-state HMM)
+
+**Model:**
+```
+s_t ∈ {0=normal, 1=stressed}
+y_t | s_t=j ~ N(μ_j, σ_j²)
+Transition matrix P:  P[i,j] = P(s_t=j | s_{t-1}=i)
+  P = [[p00,   1-p00],
+       [1-p11, p11  ]]
+```
+
+**Forward filter (Hamilton filter):**
+```
+Initialize: ξ_{0|0} = stationary distribution of P
+For t = 1..T:
+  Predict: ξ_{t|t-1}[j] = Σ_i P[i,j] * ξ_{t-1|t-1}[i]
+  Densities: η_t[j] = N(y_t; μ_j, σ_j²)
+  Update: ξ_{t|t} = (ξ_{t|t-1} ⊙ η_t) / Σ_j(ξ_{t|t-1}[j] * η_t[j])
+Output: ξ_{t|t}[1] = P(s_t = stressed | data_1..t)
+```
+
+**Parameter estimation:** EM (Baum-Welch) or direct MLE via Nelder-Mead. Initial values: set μ_0/σ_0 from calm periods, μ_1/σ_1 from crisis periods (2008, 2020). Use log-space for numerical stability. Multiple random restarts to avoid local optima.
+
+### LPPL fitting
+
+**Model:**
+```
+ln P(t) = A + B·(tc-t)^m + C·(tc-t)^m·cos(ω·ln(tc-t) + φ)
+```
+Constraints: B < 0, 0.1 ≤ m ≤ 0.9, 6 ≤ ω ≤ 13, |C| ≤ 1, tc > t_end.
+
+**Linearization (Filimonov & Sornette 2011):** For fixed tc, m, ω, define:
+```
+f1 = (tc-t)^m
+f2 = (tc-t)^m · cos(ω·ln(tc-t))
+f3 = (tc-t)^m · sin(ω·ln(tc-t))
+```
+Solve `ln P = A + B·f1 + C1·f2 + C2·f3` by OLS. Then `C = √(C1²+C2²)`, `φ = atan2(-C2, C1)`.
+
+**Procedure:** Grid search over (tc, m, ω). For each candidate, solve OLS, check constraints, record RMSE. Retain fits meeting all constraints. Report distribution of tc across valid fits; tight clustering = stronger signal. Minimum data window: 250 observations.
+
+### Critical slowing down
+
+For signal x_t, rolling window W = 252 days:
+```
+AR(1) coefficient:  fit x_t = α + β·x_{t-1} + ε via OLS → β_t
+Rolling variance:   var_t = variance(x_{t-W+1} .. x_t)
+CSD warning:        β_t trending toward 1 AND var_t trending up simultaneously
+```
+Combined indicator: track 63-day rate of change of both β and var. Dual increase = elevated risk. Apply to credit spreads, VIX, and the largest eigenvalue of the cross-asset correlation matrix.
+
+### Hawkes process branching ratio
+
+**Model:**
+```
+λ(t) = μ + α · Σ_{t_i < t} exp(-β·(t - t_i))
+Branching ratio: n = α/β   (n < 1 = stable; n → 1 = critical)
+```
+
+**MLE:**
+```
+log L = Σ_i ln λ(t_i) - ∫_0^T λ(t) dt
+      = Σ_i ln λ(t_i) - μ·T - (α/β)·Σ_i (1 - exp(-β·(T - t_i)))
+```
+Analytic gradient available. Optimize with L-BFGS-B. Bounds: μ > 0, α ≥ 0, β > 0.
+
+**Event definition:** VIX threshold crossings `VIX_t > VIX_{t-1} + 1.5·σ`, or large order flow imbalances. Estimate on 252-day rolling window. Rolling n approaching 1 is a warning signal.
 
 ## Scoring (proposed)
 
@@ -278,6 +455,88 @@ Signals differ in how quickly they react to regime transitions. A rough taxonomy
 - **Potentially leading**: critical slowing down indicators (rising variance + autocorrelation), LPPL fit, branching ratio from Hawkes model
 
 In the scoring formula, fast signals should dominate for short-horizon regime calls; slower signals provide structural context.
+
+## Implementation notes
+
+### Frequency alignment
+
+Signals update at different cadences. Maintain all in daily resolution:
+
+| Cadence | Examples | Treatment |
+|---------|----------|-----------|
+| Daily | VIX, credit spreads, OFR FSI, SOFR, yield curve | Use directly |
+| Weekly | STLFSI (released Friday), COT (Tuesday data, Friday release) | Forward-fill to daily |
+| Monthly | ETF flows, ACM term premium, macro series | Forward-fill to daily |
+
+Mark each signal with a `last_updated` timestamp. If a signal is stale > 5 business days, treat as missing.
+
+### Release delays and look-ahead bias
+
+Many series are released with a lag. Using tomorrow's data today is look-ahead bias and will invalidate any backtest.
+
+| Signal | Lag | Notes |
+|--------|-----|-------|
+| FRED daily series | ~1 business day | |
+| OFR FSI | ~1 business day | |
+| CFTC COT | 3 days | Tuesday data released Friday |
+| FOMC minutes | ~3 weeks after meeting | |
+| ETF flows | 1 business day | |
+| STLFSI | Same day (Friday) | |
+
+For backtesting, always index by the date the data became available, not the observation date.
+
+### Missing data
+
+Sources of missing values: weekends/holidays, API downtime, discontinued series, data before series start.
+
+Strategy:
+1. Forward-fill up to 5 business days.
+2. Beyond 5 days: mark signal as `NaN`; exclude from bucket mean.
+3. If > 50% of signals in a bucket are `NaN`: emit `NaN` for that bucket.
+4. If > 50% of buckets are `NaN`: do not emit a regime label.
+5. Never emit a regime label from insufficient data.
+
+Discontinued series: TED spread (`TEDRATE`) ended April 2022. Substitute: SOFR vs. 3-month T-bill spread.
+
+### Warmup periods
+
+Rolling statistics require a minimum number of observations before they are meaningful:
+
+| Statistic | Min observations |
+|-----------|-----------------|
+| Rolling z-score (daily) | 63 (3 months) |
+| Rolling percentile | 126 (6 months) |
+| Hamilton filter | 252 (1 year) |
+| LPPL | 250 |
+| Critical slowing down AR(1) | 126 |
+| Hawkes MLE | 100 events |
+
+Full signal availability for FRED-based signals starts around 2005 (limited by STLFSI and ICE BofA spread series). For backtesting from 1990, expect many signals to be unavailable.
+
+### Numerical stability
+
+**Hamilton filter:** work in log-space. Use `log_sum_exp` for normalization. Clip filtered probabilities to `[1e-10, 1 - 1e-10]`.
+
+**LPPL:** `(tc - t)^m` blows up when `tc - t → 0`. Floor at `max(tc - t, 1e-10)`. Use double precision throughout.
+
+**Hawkes MLE:** the integral term can underflow for long series. Use compensated summation (Kahan) for numerical accuracy.
+
+**Rolling variance:** use Welford's online algorithm for numerically stable one-pass computation.
+
+**Z-score:** if `σ = 0` (constant signal), emit `NaN` rather than dividing by zero.
+
+### Rust crate suggestions
+
+| Task | Crate |
+|------|-------|
+| HTTP / FRED API | `reqwest`, `ureq` |
+| JSON parsing | `serde_json` |
+| DataFrame / time series | `polars` |
+| Linear algebra | `nalgebra`, `ndarray` |
+| Optimization (L-BFGS-B for Hawkes) | `argmin` |
+| Statistics | `statrs` |
+| Date handling | `chrono` |
+| Parallel computation | `rayon` |
 
 ## References
 
