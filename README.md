@@ -112,6 +112,14 @@ Realized volatility has a Hurst exponent H ≈ 0.1, far below 0.5. Volatility is
 
 Leverage and balance-sheet constraints of financial intermediaries drive risk premia and liquidity. When intermediary capital is scarce, risk premia spike and liquidity dries up simultaneously — a defining signature of risk-off regimes. Provides a unified micro-foundation for why credit spreads, VRP, and funding stress co-move at regime transitions, something neither Hamilton nor Sornette explains directly.
 
+### Financial network contagion (Acemoglu, Ozdaglar, Elliott, Golub, Jackson)
+
+The topology of the financial network determines whether idiosyncratic shocks amplify into systemic crises. Key result: dense interconnection is "robust yet fragile" — the network absorbs small shocks but amplifies large ones past a critical threshold. When a major node fails, losses cascade through counterparty exposures.
+
+DebtRank (Battiston et al. 2012) quantifies each node's systemic importance: how much economic value is lost if it defaults. Unlike CoVaR and SRISK, which measure statistical co-movement, DebtRank captures the transmission mechanism through the balance-sheet network.
+
+This framework explains *why* funding stress, credit spreads, and equity volatility co-move at regime transitions: the network of counterparty exposures transmits and amplifies the initial shock. Practical signal: aggregate DebtRank or eigenvector centrality of major financial institutions; rising concentration of centrality = increasing fragility.
+
 ## Signals (planned)
 
 Signals are grouped into thematic families. Each entry in the spec below lists the data source, raw measurement, and normalization method. Not all signals are available for free; see Data availability above.
@@ -456,6 +464,63 @@ Signals differ in how quickly they react to regime transitions. A rough taxonomy
 
 In the scoring formula, fast signals should dominate for short-horizon regime calls; slower signals provide structural context.
 
+## Financial regimes and the business cycle
+
+Financial regimes are not the same as business cycles, but they are closely related.
+
+### Distinctions
+
+- Not all recessions follow financial stress: the 2020 COVID shock was an external event with financial amplification, not a financial cycle peak.
+- Not all financial stress causes recessions: the 2011 EU sovereign crisis was severe stress in Europe but only a soft patch in the US.
+- Financial regime signals aim to be real-time; NBER recession dating is ex-post by 6–12 months.
+- Financial regimes operate at shorter horizons (weeks to months); business cycles at longer horizons (years).
+
+### Yield curve as recession predictor
+
+The 10Y-3M spread (FRED: `T10Y3M`) has inverted before every US recession since 1960 with a lead of ~12 months. Estrella and Mishkin (1998) formalize this as a probit model. The 10Y-2Y spread is more widely watched but 10Y-3M has stronger empirical predictive power. A spread below zero for 3+ months implies elevated recession probability.
+
+### Financial conditions indices
+
+The Chicago Fed NFCI (FRED: `NFCI`, weekly) aggregates 105 indicators across money markets, debt markets, equity markets, and shadow banking. Positive = tighter than average. Correlation with OFR FSI is high but they capture different aspects; using both adds coverage.
+
+### Typical sequence in a financially-driven recession
+
+1. Credit spreads widen (6–18 months before recession onset)
+2. Yield curve inverts (12–18 months before onset)
+3. Equity market peaks (6–9 months before onset)
+4. Financial stress indices spike (contemporaneous with onset)
+5. NBER calls the recession start (6–12 months after onset)
+
+A risk-off regime signal does not guarantee recession; it signals elevated probability. Use FRED `USREC` as the primary validation benchmark: does risk-off predict `USREC=1` in the subsequent 3–12 months at above-base-rate frequency?
+
+## International regimes and contagion
+
+Regime shifts propagate across borders through three channels:
+
+1. **Trade**: recession in one country reduces demand for exports, spreading weakness.
+2. **Financial**: common lenders, cross-border holdings, global funding markets. A US money market fund run (2008, 2020) instantly affects European bank funding.
+3. **Information/confidence**: a shock in one market updates beliefs globally, triggering correlated repositioning even where fundamentals are unchanged.
+
+### Twin crises and sudden stops
+
+Kaminsky and Reinhart (1999) document the "twin crises" pattern: banking crises and currency crises tend to occur together and reinforce each other. Leading indicators: reserve depletion, M2/reserves ratio, credit growth, current account deficit, real exchange rate overvaluation.
+
+Calvo (1998) defines sudden stops as large rapid reversals in capital inflows — the primary crisis trigger in emerging markets. Vulnerability indicators: current account deficit size, foreign currency debt share, reserve adequacy.
+
+### BIS credit-to-GDP gap
+
+The BIS credit-to-GDP gap (credit/GDP relative to its long-run trend) is the single best cross-country leading indicator of banking crises. The empirical basis for Basel III countercyclical capital buffer requirements. A gap above +10pp signals elevated banking crisis risk within 1–3 years. Available quarterly from https://www.bis.org/statistics/c_gaps.htm.
+
+### Contagion vs. fundamentals
+
+Forbes and Rigobon (2002) show that apparent cross-country correlation increases during crises largely disappear after correcting for heteroscedasticity — what looks like contagion is often common fundamentals being revealed simultaneously. True contagion is propagation beyond what fundamentals justify. This matters for signal interpretation: a cross-asset correlation spike may be information, not amplification.
+
+### Cross-country data sources
+
+- BIS credit-to-GDP gap: https://www.bis.org/statistics/c_gaps.htm
+- IMF Global Financial Stability Report: https://www.imf.org/en/Publications/GFSR
+- Chicago Fed NFCI: FRED `NFCI`
+
 ## Implementation notes
 
 ### Frequency alignment
@@ -543,6 +608,7 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 ### Variance risk premium / tail-risk premia
 
 - Bollerslev, Tauchen, Zhou (2009). Expected stock returns and variance risk premia. Review of Financial Studies. https://scholars.duke.edu/individual/pub732839
+- Barndorff-Nielsen, Shephard (2002). Econometric analysis of realized volatility and its use in estimating stochastic volatility models. Journal of the Royal Statistical Society B. https://doi.org/10.1111/1467-9868.00336
 - Bollerslev, Todorov, Xu (2015). Tail risk premia and return predictability. Journal of Financial Economics. https://scholars.duke.edu/publication/1060835
 - Bollerslev, Marrone, Xu, Zhou (2014). Stock return predictability and variance risk premia: international evidence. Journal of Financial and Quantitative Analysis. https://www.cambridge.org/core/journals/journal-of-financial-and-quantitative-analysis/article/abs/stock-return-predictability-and-variance-risk-premia-statistical-inference-and-international-evidence/0BE5DE1D942A0342DDBA24D7BFBEA5C8
 - Bekaert, Hoerova (2014). The VIX, the variance premium and stock market volatility. Journal of Econometrics. https://www.nber.org/papers/w18995
@@ -562,6 +628,7 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 ### LPPL / critical crash diagnostics
 
 - Sornette (1997). Large financial crashes. Physica A. https://doi.org/10.1016/S0378-4371(97)00318-X
+- Filimonov, Sornette (2011). A stable and robust calibration scheme of the log-periodic power law model. Physica A. https://doi.org/10.1016/j.physa.2011.05.046
 - Wheatley, Sornette, Huber, Reppen, Gantner (2019). Are Bitcoin bubbles predictable? Royal Society Open Science. https://doi.org/10.1098/rsos.180538
 
 ### Financial stress indices
@@ -572,6 +639,8 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 ### Regime-switching
 
 - Hamilton (1989). A new approach to the economic analysis of nonstationary time series and the business cycle. Econometrica. https://doi.org/10.2307/1912559
+- Ang, Bekaert (2002). International asset allocation with regime shifts. Review of Financial Studies. https://doi.org/10.1093/rfs/15.4.1137
+- Bai, Perron (1998). Estimating and testing linear models with multiple structural changes. Econometrica. https://doi.org/10.2307/2998540
 
 ### Term structure and bond risk premia
 
@@ -614,121 +683,137 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 - Acharya, Pedersen, Philippon, Richardson (2017). Measuring systemic risk. Review of Financial Studies. https://doi.org/10.1093/rfs/hhw088
 - Brownlees, Engle (2017). SRISK: A conditional capital shortfall measure of systemic risk. Review of Financial Studies. https://doi.org/10.1093/rfs/hhw060
 
+### Financial networks and contagion
+
+- Acemoglu, Ozdaglar, Tahbaz-Salehi (2015). Systemic risk and stability in financial networks. American Economic Review. https://doi.org/10.1257/aer.20130456
+- Elliott, Golub, Jackson (2014). Financial networks and contagion. American Economic Review. https://doi.org/10.1257/aer.104.10.3115
+
+### Business cycle and financial conditions
+
+- Estrella, Mishkin (1998). Predicting U.S. recessions: financial variables as leading indicators. Review of Economics and Statistics. https://doi.org/10.1162/003465398557320
+- Schularick, Taylor (2012). Credit booms gone bust: monetary policy, leverage cycles, and financial crises, 1870–2008. American Economic Review. https://doi.org/10.1257/aer.102.2.1029
+
+### International regimes and currency crises
+
+- Kaminsky, Reinhart (1999). The twin crises: the causes of banking and balance-of-payments problems. American Economic Review. https://doi.org/10.1257/aer.89.3.473
+- Calvo (1998). Capital flows and capital-market crises: the simple economics of sudden stops. Journal of Applied Economics. https://doi.org/10.1080/15140326.1998.12040516
+- Forbes, Rigobon (2002). No contagion, only interdependence: measuring stock market comovements. Journal of Finance. https://doi.org/10.1111/0022-1082.00494
+
 ## People to watch
 
 Researchers and groups to monitor for new papers in this space.
 
 ### Variance risk premium and realized volatility
 
-- Tim Bollerslev
-- George Tauchen
-- Hao Zhou
-- Viktor Todorov
-- Lai Xu
-- Geert Bekaert
-- Marie Hoerova
-- Torben Andersen
-- Ole Barndorff-Nielsen
-- Neil Shephard
-- Nour Meddahi
-- Francis X. Diebold
-- Caio Almeida
-- Yacine Aït-Sahalia
+- **Tim Bollerslev** — ARCH; VRP and return predictability; tail risk premia
+- **George Tauchen** — VRP, realized variance methodology (with Bollerslev)
+- **Hao Zhou** — VRP and stock return predictability; jump risk premia
+- **Viktor Todorov** — tail risk premia; jump processes; nonparametric high-frequency methods
+- **Lai Xu** — tail risk premia; international VRP evidence
+- **Geert Bekaert** — VRP and stock market volatility (with Hoerova); international finance
+- **Marie Hoerova** — VRP and volatility (with Bekaert); financial stability
+- **Torben Andersen** — realized volatility framework (with Bollerslev, Diebold); high-frequency econometrics
+- **Ole Barndorff-Nielsen** — realized variance theory; BNS jump test; bipower variation
+- **Neil Shephard** — realized variance; stochastic volatility (with Barndorff-Nielsen)
+- **Nour Meddahi** — integrated volatility estimation; ANOVA for volatility
+- **Francis X. Diebold** — realized volatility (with Andersen, Bollerslev); forecast evaluation; DY connectedness
+- **Caio Almeida** — model-free tail risk measures from options; term structure
+- **Yacine Aït-Sahalia** — jumps in equity prices; nonparametric high-frequency methods; VRP
 
 ### Fat tails, power laws, and crash hazard
 
-- Didier Sornette
-- Jean-Philippe Bouchaud
-- Niklas Wheatley
-- Tobias Huber
-- Max Reppen
-- Robert N. Gantner
-- Xavier Gabaix
-- Nassim Nicholas Taleb
-- Paul Embrechts
-- Rama Cont
+- **Didier Sornette** — LPPL crash prediction; Why Stock Markets Crash (2003); dragon kings
+- **Jean-Philippe Bouchaud** — market impact; econophysics; Theory of Financial Risk and Derivative Pricing
+- **Niklas Wheatley** — Bitcoin bubble prediction with LPPL (2019)
+- **Tobias Huber** — LPPL, Bitcoin bubbles (2019)
+- **Max Reppen** — LPPL, Bitcoin bubbles (2019)
+- **Robert N. Gantner** — LPPL, Bitcoin bubbles (2019)
+- **Xavier Gabaix** — power laws in finance; granular origins of aggregate volatility
+- **Nassim Nicholas Taleb** — Black Swan; fat tails; Incerto series; technical work on tail estimation
+- **Paul Embrechts** — extreme value theory; Modelling Extremal Events (1997); copulas for tail dependence
+- **Rama Cont** — heavy-tailed distributions; order book models; financial contagion networks
 
 ### Volatility term structure and options
 
-- Liuren Wu
-- Gurdip Bakshi
-- Peter Carr
-- Jin-Chuan Duan
+- **Liuren Wu** — variance swaps; VIX dynamics; volatility term structure; jump risk
+- **Gurdip Bakshi** — model-free option moments; higher-order risk measures; VVIX-type signals
+- **Peter Carr** — variance swap replication underlying VIX construction; volatility derivatives
+- **Jin-Chuan Duan** — GARCH option pricing; physical vs. risk-neutral volatility distributions
 
 ### Liquidity and funding stress
 
-- Markus Brunnermeier
-- Lasse Heje Pedersen
-- Lubos Pastor
-- Robert Stambaugh
-- Hyun Song Shin
-- Darrell Duffie
-- Arvind Krishnamurthy
-- Dimitri Vayanos
-- Viral Acharya
-- Nicolae Garleanu
-- Zhiguo He
+- **Markus Brunnermeier** — funding liquidity spirals; market/funding liquidity nexus (2009); liquidity black holes
+- **Lasse Heje Pedersen** — funding liquidity; liquidity-adjusted CAPM; margin CAPM (with Garleanu)
+- **Lubos Pastor** — liquidity risk and expected returns (2003, with Stambaugh)
+- **Robert Stambaugh** — liquidity risk and expected returns (2003, with Pastor)
+- **Hyun Song Shin** — leverage cycles; bank balance sheets as macro risk; risk-taking channel
+- **Darrell Duffie** — OTC market liquidity; slow-moving capital; dynamic asset pricing theory
+- **Arvind Krishnamurthy** — intermediary asset pricing (with He); safe asset scarcity; amplification
+- **Dimitri Vayanos** — flight to quality; liquidity and asset pricing theory; search frictions
+- **Viral Acharya** — systemic liquidity risk; SRISK; too-big-to-fail; financial regulation
+- **Nicolae Garleanu** — margin-based asset pricing (with Pedersen); liquidity and portfolio choice
+- **Zhiguo He** — intermediary asset pricing (with Krishnamurthy); leverage cycles; debt maturity
 
 ### Market microstructure and price impact
 
-- Bence Toth
-- Yvan Lemperiere
-- Cecile Deremble
-- Jonathan Donier
-- Albert J. Menkveld
-- Yueshen Bian
-- Albert Kyle
-- Thierry Foucault
-- Maureen O'Hara
-- Tarun Chordia
-- Terrence Hendershott
-- Marc Potters
-- Fabrizio Lillo
-- Jim Gatheral
-- Mathieu Rosenbaum
-- Charles-Albert Lehalle
+- **Bence Toth** — price impact; critical nature of liquidity; anomalous diffusion
+- **Yvan Lemperiere** — price impact; market microstructure (CFM group)
+- **Cecile Deremble** — market microstructure (CFM group)
+- **Jonathan Donier** — critical liquidity; Bitcoin crash analysis (with Bouchaud)
+- **Albert J. Menkveld** — flash crash; HFT; market microstructure; intermediation
+- **Yueshen Bian** — flash crash; market fragmentation (with Menkveld)
+- **Albert Kyle** — informed trading and price impact (Kyle 1985 model); lambda as illiquidity measure
+- **Thierry Foucault** — limit order book theory; market microstructure design; HFT
+- **Maureen O'Hara** — Market Microstructure Theory (textbook); liquidity and information
+- **Tarun Chordia** — order imbalance and return predictability; empirical liquidity; arbitrage
+- **Terrence Hendershott** — algorithmic trading; HFT and market quality; electronic markets
+- **Marc Potters** — market impact; portfolio theory; risk management (CFM, with Bouchaud)
+- **Fabrizio Lillo** — market impact scaling; order flow; price formation; order book dynamics
+- **Jim Gatheral** — no-dynamic-arbitrage market impact model; rough volatility (with Rosenbaum)
+- **Mathieu Rosenbaum** — rough volatility (H≈0.1); Hawkes processes; microstructure noise
+- **Charles-Albert Lehalle** — optimal execution; market impact; market microstructure analytics
 
 ### Financial stress indices and systemic risk
 
-- Phillip Monin
-- Michael Flood
-- John Liechty
-- Krista Piontek
-- Jan Hatzius
-- Stijn Claessens
-- Robert Engle
-- Stefano Giglio
-- Bryan Kelly
-- Monica Billio
-- Andrew Lo
-- Olivier Scaillet
-- Markus Pelger
-- Jon Danielsson
+- **Phillip Monin** — OFR Financial Stress Index (2019)
+- **Michael Flood** — systemwide liquidity commonalities; OFR financial stability research
+- **John Liechty** — systemwide liquidity (with Flood, Piontek)
+- **Krista Piontek** — systemwide liquidity (with Flood, Liechty)
+- **Jan Hatzius** — financial conditions indices; GS FCI methodology; macro forecasting
+- **Stijn Claessens** — financial crises; systemic risk; cross-country financial cycle analysis
+- **Robert Engle** — ARCH (Nobel 2003); DCC model for cross-asset correlations; SRISK
+- **Stefano Giglio** — tail risk in the cross-section; long-run disaster risk; systemic risk measurement
+- **Bryan Kelly** — TAIL risk measure; ML for factor models; return predictability
+- **Monica Billio** — Granger-causality systemic risk across asset classes; connectedness
+- **Andrew Lo** — adaptive markets hypothesis; systemic risk; hedge fund risk; financial innovation
+- **Olivier Scaillet** — copulas; tail dependence; nonparametric econometrics; risk measures
+- **Markus Pelger** — latent factor models with ML; generalized PCA; high-dimensional risk
+- **Jon Danielsson** — procyclical VaR; model risk in financial regulation; endogenous risk
 
 ### Regime-switching
 
-- James Hamilton
-- Andrew Ang
-- Allan Timmermann
-- Roger Farmer
-- Lars Hansen
+- **James Hamilton** — Markov regime-switching model (Hamilton 1989); the foundational reference
+- **Andrew Ang** — regime-switching asset pricing; international equities under regime changes
+- **Allan Timmermann** — regime shifts in return predictability; structural breaks; forecasting
+- **Roger Farmer** — self-fulfilling crash equilibria; animal spirits; indeterminate equilibria
+- **Lars Hansen** — GMM (Nobel 2013); model uncertainty and robust control; Hansen-Jagannathan bound
 
 ### Credit spreads and macro
 
-- Simon Gilchrist
-- Egon Zakrajsek
-- Mark Gertler
-- Ben Bernanke
-- Robert Merton
-- Francis Longstaff
-- John Geanakoplos
-- Ricardo Reis
+- **Simon Gilchrist** — GZ credit spread as business cycle predictor (2012); financial accelerator
+- **Egon Zakrajsek** — GZ spread; excess bond premium; credit conditions
+- **Mark Gertler** — financial accelerator (with Bernanke, Gilchrist); DSGE models with financial frictions
+- **Ben Bernanke** — financial accelerator; credit channel of monetary policy; financial crises
+- **Robert Merton** — structural credit model (Merton 1974); distance-to-default
+- **Francis Longstaff** — liquidity premium in credit spreads; Treasury microstructure; flight to liquidity
+- **John Geanakoplos** — leverage cycle; collateral equilibrium; credit cycles
+- **Ricardo Reis** — safe asset scarcity; monetary policy transmission; financial stability
 
 ### Term structure and bond risk premia
 
-- John Cochrane
-- Monika Piazzesi
-- Tobias Adrian
-- Richard Crump
-- Emanuel Moench
-- John Campbell
+- **John Cochrane** — bond risk premia (with Piazzesi); discount rates; asset pricing theory
+- **Monika Piazzesi** — bond risk premia (with Cochrane); macro-finance term structure
+- **Tobias Adrian** — ACM term premium model; intermediary pricing; financial stability
+- **Richard Crump** — ACM term premium model; term structure estimation
+- **Emanuel Moench** — ACM term premium model; factor models for yield curve
+- **John Campbell** — return predictability; yield curve; long-run risks; consumption-based pricing
