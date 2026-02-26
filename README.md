@@ -267,6 +267,7 @@ Researchers and groups to monitor for new papers in this space.
 - Nour Meddahi
 - Francis X. Diebold
 - Caio Almeida
+- Yacine Aït-Sahalia
 
 ### Fat tails, power laws, and crash hazard
 
@@ -298,6 +299,7 @@ Researchers and groups to monitor for new papers in this space.
 - Dimitri Vayanos
 - Viral Acharya
 - Nicolae Garleanu
+- Zhiguo He
 
 ### Market microstructure and price impact
 
@@ -312,6 +314,8 @@ Researchers and groups to monitor for new papers in this space.
 - Maureen O'Hara
 - Tarun Chordia
 - Terrence Hendershott
+- Marc Potters
+- Fabrizio Lillo
 
 ### Financial stress indices and systemic risk
 
@@ -325,6 +329,9 @@ Researchers and groups to monitor for new papers in this space.
 - Stefano Giglio
 - Bryan Kelly
 - Monica Billio
+- Andrew Lo
+- Olivier Scaillet
+- Markus Pelger
 
 ### Regime-switching
 
@@ -342,6 +349,7 @@ Researchers and groups to monitor for new papers in this space.
 - Robert Merton
 - Francis Longstaff
 - John Geanakoplos
+- Ricardo Reis
 
 ### Term structure and bond risk premia
 
