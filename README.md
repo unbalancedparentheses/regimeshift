@@ -1,6 +1,6 @@
 # regimeshift
 
-Regime and risk-on/risk-off signals for markets, combining fat-tail crash ideas, variance risk premium (VRP), and liquidity/impact proxies.
+A research project for detecting market regime shifts — transitions between risk-on and risk-off states — by combining signals from multiple traditions: variance risk premium, liquidity and funding stress, tail-risk and crash diagnostics, credit and macro indicators, and systemic risk measures. The goal is transparent, inspectable signals grounded in the academic literature, not black-box scores.
 
 ## Not financial advice
 
@@ -70,6 +70,8 @@ Realized volatility has a Hurst exponent H ≈ 0.1, far below 0.5. Volatility is
 Leverage and balance-sheet constraints of financial intermediaries drive risk premia and liquidity. When intermediary capital is scarce, risk premia spike and liquidity dries up simultaneously — a defining signature of risk-off regimes. Provides a unified micro-foundation for why credit spreads, VRP, and funding stress co-move at regime transitions, something neither Hamilton nor Sornette explains directly.
 
 ## Signals (planned)
+
+Signals are grouped into thematic families. Each entry in the spec below lists the data source, raw measurement, and normalization method. Not all signals are available for free; see Data availability above.
 
 ### Signals spec
 
@@ -248,6 +250,35 @@ Also expose:
 - `confidence = min(1, |regime_score| / 2)`
 - `contributors`: top-3 buckets by absolute impact
 
+## Evaluation (proposed)
+
+A regime signal is only useful if it predicts something. Candidate target variables and evaluation approaches:
+
+### Target variables
+
+- **Forward drawdown**: does a risk-off reading predict above-average drawdown in the next 1–4 weeks?
+- **Sharpe ratio by regime**: is realized Sharpe higher in risk-on periods and lower or negative in risk-off?
+- **Crisis coincidence**: do known stress episodes (2008, 2011 EU crisis, 2020 COVID, 2022 rate shock) register as risk-off before or during the event?
+
+### Evaluation approach
+
+1. Label historical periods using the scoring formula.
+2. Compute forward returns and drawdowns conditional on each regime label.
+3. Check calibration: does `confidence` correlate with realized severity?
+4. Backtest a simple rule: hold equities in risk-on, hold cash/bonds in risk-off. Compare Sharpe and max drawdown to buy-and-hold.
+5. Re-weight bucket coefficients to maximize out-of-sample Sharpe using a held-out period.
+
+### Signal lead/lag properties
+
+Signals differ in how quickly they react to regime transitions. A rough taxonomy:
+
+- **Fast / contemporaneous**: VIX, VVIX, order flow imbalance, SRISK — move with or slightly before price
+- **Medium**: credit spreads, funding spreads, cross-asset correlation, FOMC tone — days to weeks
+- **Slow / lagging**: COT positioning, ETF flows, CFTC data — weekly release cadence, structural rather than tactical
+- **Potentially leading**: critical slowing down indicators (rising variance + autocorrelation), LPPL fit, branching ratio from Hawkes model
+
+In the scoring formula, fast signals should dominate for short-horizon regime calls; slower signals provide structural context.
+
 ## References
 
 ### Variance risk premium / tail-risk premia
@@ -279,7 +310,11 @@ Also expose:
 - Monin (2019). The OFR Financial Stress Index. Risks. https://www.mdpi.com/2227-9091/7/1/25
 - Office of Financial Research. Financial Stress Index (FSI) methodology and data. https://www.financialresearch.gov/financial-stress-index/
 
-### Regime-switching & macro regime signals
+### Regime-switching
+
+- Hamilton (1989). A new approach to the economic analysis of nonstationary time series and the business cycle. Econometrica. https://doi.org/10.2307/1912559
+
+### Term structure and bond risk premia
 
 - Cochrane, Piazzesi (2005). Bond risk premia. NBER Working Paper. https://www.nber.org/papers/w9178
 - Adrian, Crump, Moench (2013). Pricing the term structure with linear regressions. NY Fed Staff Report 340. https://www.newyorkfed.org/research/staff_reports/sr340.html
