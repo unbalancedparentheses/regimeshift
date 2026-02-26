@@ -41,24 +41,35 @@ Signal availability varies by source. A practical breakdown:
 
 This affects which signals are usable in an MVP vs a production system.
 
+## Theoretical frameworks
+
+Different schools offer distinct explanations of what a regime is and how transitions occur. Understanding the tension between them is important: this project draws on all of them, but they are not always compatible.
+
+### The core tension: statistical vs. physical approaches
+
+**Hamilton's regime-switching** treats regimes as latent discrete states inferred from data. The model is agnostic about what causes transitions — it estimates a transition matrix from history and outputs a probability distribution over states. It is statistically rigorous and well-understood, but it assumes a fixed number of regimes and stationary dynamics. It cannot predict when the next transition will occur; it can only tell you which regime you are probably in right now.
+
+**Sornette's LPPL framework** treats regime endings as deterministic critical points driven by endogenous positive feedback (herding, leverage spirals). The approach is forward-looking — it aims to forecast crash timing — and is grounded in statistical physics rather than econometrics. But it is harder to validate out of sample and sensitive to fitting assumptions. It views markets as driven toward criticality, not randomly switching between stable states.
+
+These are genuinely different ontologies. Hamilton says regimes are states you infer; Sornette says crashes are events you can anticipate. Most of the other frameworks below sit between these poles or address different aspects of the same phenomenon.
+
+### Critical slowing down (Scheffer et al.)
+
+Near a tipping point, systems recover more slowly from small perturbations. Observable signatures: rising variance, rising autocorrelation, and rising cross-correlation across variables as the system approaches a bifurcation. Practical use: monitor rolling variance and AR(1) coefficient of key signals — acceleration in both is a warning independent of any specific model. This is the empirical complement to Sornette's theoretical prediction.
+
+### Hawkes processes and event clustering (Bacry, Muzy, Jaisson)
+
+Extreme events cluster in time due to self-excitation: each event raises the probability of further events. Regime transitions appear as shifts in the branching ratio (ratio of triggered to background events). A branching ratio approaching 1 signals a system near criticality. Applies to order flow, volatility spikes, and default events. Provides a middle ground: more data-driven than LPPL, more mechanistic than Hamilton.
+
+### Rough volatility (Gatheral, Rosenbaum)
+
+Realized volatility has a Hurst exponent H ≈ 0.1, far below 0.5. Volatility is rougher than a random walk and has long-range anti-persistence at short scales. Standard GARCH-based models underestimate short-term vol clustering; rough vol models better capture the rapid spikes that precede stress regimes. Practically relevant for calibrating VRP and vol-of-vol signals.
+
+### Intermediary asset pricing (Adrian, Shin, He, Krishnamurthy)
+
+Leverage and balance-sheet constraints of financial intermediaries drive risk premia and liquidity. When intermediary capital is scarce, risk premia spike and liquidity dries up simultaneously — a defining signature of risk-off regimes. Provides a unified micro-foundation for why credit spreads, VRP, and funding stress co-move at regime transitions, something neither Hamilton nor Sornette explains directly.
 
 ## Signals (planned)
-
-- Financial stress indices (OFR FSI, STLFSI) as macro stress regime baselines.
-- VIX term structure slope (contango vs backwardation) as a volatility regime indicator.
-- Option skew (e.g., Cboe SKEW) as tail-risk pricing proxy.
-- MOVE index (bond market volatility) as a rates/credit stress signal.
-- Funding-liquidity stress proxies (e.g., TED spread / short-term funding spreads).
-- Liquidity/impact proxies (e.g., Amihud illiquidity, order-book depth when available).
-- Credit spreads (e.g., Baa-Aaa, HY-IG) as early stress signals.
-- Yield curve / term premium (e.g., 2s10s, 3m10y) as macro regime proxies.
-- Cross-asset correlation spikes as stress regime indicators.
-- Vol-of-vol (e.g., VVIX) as a volatility-regime transition signal.
-- Positioning/flows (e.g., CFTC COT, ETF flows) as crowding/risk signals.
-- Funding stress spreads (e.g., SOFR-OIS, FRA-OIS, repo specials) as modern liquidity stress proxies.
-- Order flow imbalance (signed buy/sell volume) as a microstructure stress indicator.
-- Network/contagion measures (CoVaR, MES, SRISK) as systemic risk signals.
-- Text and sentiment signals (FOMC tone, news uncertainty) as forward-looking regime indicators.
 
 ### Signals spec
 
@@ -203,24 +214,28 @@ We combine normalized signals into a regime score in three steps:
 Each bucket score is the mean of its member signals (after normalization).
 
 - **Risk premium**: VRP, tail-risk premium
-- **Liquidity**: funding spreads, TED, Amihud, order-book depth
+- **Liquidity**: funding spreads, TED, Amihud, order-book depth, order flow imbalance
 - **Volatility**: VIX slope, SKEW, MOVE, VVIX
 - **Credit/macro**: credit spreads, yield curve/term premium, stress indices
 - **Structure/flows**: cross-asset correlation, COT positioning, ETF flows
+- **Contagion**: CoVaR, MES, SRISK
+- **Sentiment**: FOMC tone, news-based uncertainty
 
 ### Regime score
 
 Let each bucket score be in z-space. Define:
 
 ```
-regime_score = -0.30*risk_premium
-               -0.25*liquidity
-               -0.20*volatility
+regime_score = -0.25*risk_premium
+               -0.20*liquidity
+               -0.15*volatility
                -0.15*credit_macro
                -0.10*structure_flows
+               -0.10*contagion
+               -0.05*sentiment
 ```
 
-Negative weights mean higher stress → more risk-off. We can re-weight after backtesting.
+Negative weights mean higher stress → more risk-off. Weights are a starting point; re-weight after backtesting.
 
 ### Labels
 
@@ -232,34 +247,6 @@ Also expose:
 
 - `confidence = min(1, |regime_score| / 2)`
 - `contributors`: top-3 buckets by absolute impact
-
-## Theoretical frameworks
-
-Different schools offer distinct explanations of what a regime is and how transitions occur. These are complementary rather than competing.
-
-### Statistical regime-switching (Hamilton)
-
-Regimes are latent discrete states inferred from observable data via a hidden Markov model. The transition matrix is estimated from history; the current state is a probability distribution over states. Strengths: principled uncertainty quantification, well-understood econometrics. Limitation: assumes a fixed number of regimes and stationary transition probabilities.
-
-### Critical points and LPPL (Sornette)
-
-Regimes end at deterministic critical points driven by positive feedback (herding, leverage). Log-periodic power law oscillations in price signal an approaching singularity. Strengths: forward-looking crash timing, grounded in statistical physics. Limitation: hard to distinguish signal from noise in real time.
-
-### Critical slowing down (Scheffer et al.)
-
-Near a tipping point, systems recover more slowly from small perturbations. Observable signatures: rising variance, rising autocorrelation, and rising cross-correlation across variables as the system approaches a bifurcation. Practical use: monitor rolling variance and AR(1) coefficient of key signals — acceleration in both is a warning independent of any specific model.
-
-### Hawkes processes and event clustering (Bacry, Muzy, Jaisson)
-
-Extreme events cluster in time due to self-excitation: each event raises the probability of further events. Regime transitions appear as shifts in the branching ratio (ratio of triggered to background events). A branching ratio approaching 1 signals a system near criticality. Applies to order flow, volatility spikes, and default events.
-
-### Rough volatility (Gatheral, Rosenbaum)
-
-Realized volatility has a Hurst exponent H ≈ 0.1, far below 0.5. Volatility is rougher than a random walk and has long-range anti-persistence at short scales. Standard GARCH-based models underestimate short-term vol clustering; rough vol models better capture rapid spikes that precede stress regimes.
-
-### Intermediary asset pricing (Adrian, Shin, He, Krishnamurthy)
-
-Leverage and balance-sheet constraints of financial intermediaries drive risk premia and liquidity. When intermediary capital is scarce, risk premia spike and liquidity dries up simultaneously — a defining signature of risk-off regimes. Provides a unified explanation for credit spreads, VRP, and funding stress co-moving at regime transitions.
 
 ## References
 
@@ -308,6 +295,30 @@ Leverage and balance-sheet constraints of financial intermediaries drive risk pr
 ### Market structure & crash propagation
 
 - Menkveld, Yueshen (2022). The flash crash: The role of market fragmentation and high-frequency trading. https://ink.library.smu.edu.sg/lkcsb_research/7285/
+
+### Critical slowing down and tipping points
+
+- Scheffer, Carpenter, Foley, Folke, Walker (2001). Catastrophic shifts in ecosystems. Nature. https://doi.org/10.1038/35098000
+- Scheffer et al. (2009). Early-warning signals for critical transitions. Nature. https://doi.org/10.1038/nature08227
+
+### Hawkes processes in finance
+
+- Bacry, Mastromatteo, Muzy (2015). Hawkes processes in finance. Market Microstructure and Liquidity. https://doi.org/10.1142/S2382626615500057
+
+### Rough volatility
+
+- Gatheral, Jaisson, Rosenbaum (2018). Volatility is rough. Quantitative Finance. https://doi.org/10.1080/14697688.2017.1393551
+
+### Intermediary asset pricing
+
+- He, Krishnamurthy (2013). Intermediary asset pricing. American Economic Review. https://doi.org/10.1257/aer.103.2.732
+- Adrian, Shin (2014). Procyclical leverage and endogenous risk. Journal of Political Economy. https://doi.org/10.1086/682903
+
+### Systemic risk measures
+
+- Adrian, Brunnermeier (2016). CoVaR. American Economic Review. https://doi.org/10.1257/aer.20120555
+- Acharya, Pedersen, Philippon, Richardson (2017). Measuring systemic risk. Review of Financial Studies. https://doi.org/10.1093/rfs/hhw088
+- Brownlees, Engle (2017). SRISK: A conditional capital shortfall measure of systemic risk. Review of Financial Studies. https://doi.org/10.1093/rfs/hhw060
 
 ## People to watch
 
