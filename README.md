@@ -280,6 +280,7 @@ This section defines each planned signal, its data source, and a suggested norma
   - Source: equity returns and balance sheet data (Engle-Brownlees)
   - Raw: expected capital shortfall in a crisis scenario
   - Normalize: `z`
+  - Note: pre-computed MES and SRISK data available from NYU Stern V-Lab: https://vlab.stern.nyu.edu/
 
 **Text and sentiment**
 
@@ -287,6 +288,7 @@ This section defines each planned signal, its data source, and a suggested norma
   - Source: FOMC minutes and statements (NLP)
   - Raw: hawkish/dovish score or policy uncertainty index
   - Normalize: `z`
+  - Note: use the Loughran-McDonald (2011) financial sentiment dictionary for domain-appropriate word scoring (general-purpose dictionaries misclassify financial language). Master dictionary: https://sraf.nd.edu/loughranmcdonald-master-dictionary/
 - News-based uncertainty
   - Source: Baker-Bloom-Davis Economic Policy Uncertainty index or similar NLP pipeline
   - Raw: aggregate uncertainty or sentiment score
@@ -420,6 +422,8 @@ Output: ξ_{t|t}[1] = P(s_t = stressed | data_1..t)
 
 **Parameter estimation:** EM (Baum-Welch) or direct MLE via Nelder-Mead. Initial values: set μ_0/σ_0 from calm periods, μ_1/σ_1 from crisis periods (2008, 2020). Use log-space for numerical stability. Multiple random restarts to avoid local optima.
 
+**Number of states:** The canonical model uses K=2 states (normal vs. stressed). A K=3 model (expansion / neutral / contraction) adds resolution but requires substantially more data and has K*(K-1) = 6 free transition parameters vs. 2 for K=2. Use K=3 only if you have strong evidence that a third state is empirically distinct (e.g., rapid expansion clearly separated from slow growth). More states increase overfitting risk. For a regime indicator, K=2 is the safe default; validate with AIC/BIC and out-of-sample persistence of inferred regimes.
+
 ### LPPL fitting
 
 **Model:**
@@ -464,6 +468,53 @@ log L = Σ_i ln λ(t_i) - ∫_0^T λ(t) dt
 Analytic gradient available. Optimize with L-BFGS-B. Bounds: μ > 0, α ≥ 0, β > 0.
 
 **Event definition:** VIX threshold crossings `VIX_t > VIX_{t-1} + 1.5·σ`, or large order flow imbalances. Estimate on 252-day rolling window. Rolling n approaching 1 is a warning signal.
+
+### Jump risk / tail-risk premium
+
+The variance risk premium (VRP) conflates two components: compensation for continuous vol fluctuations and compensation for jump risk. Bollerslev and Todorov (2011, 2014) show that the jump component dominates return predictability.
+
+**Step 1: Decompose realized variance using BNS bipower variation (Barndorff-Nielsen, Shephard 2004).**
+
+Bipower variation is robust to jumps; realized variance is not. Their difference estimates jump variance:
+```
+# Bipower variation (using adjacent absolute returns, scaled)
+BV_t = (π/2) * (1/(W-1)) * Σ_{i=t-W+2}^{t} |r_i| * |r_{i-1}|
+
+# Continuous component (jump-robust)
+CV_t = BV_t
+
+# Jump component (floored at 0 to avoid negative estimates)
+JV_t = max(RV_t - BV_t, 0)
+```
+The BNS jump test statistic (for detecting whether JV_t is significant on a given day):
+```
+z_jump = (RV_t - BV_t) / sqrt(variance_of_RV - BV_t)
+```
+Use the realized tri-power quarticity for the denominator variance (see Barndorff-Nielsen, Shephard 2004 for the full formula).
+
+**Step 2: Estimate implied jump variance from options.**
+
+A model-free approach (Bollerslev-Todorov 2011) decomposes the VRP using deep out-of-the-money (OTM) option prices, which primarily reflect jump risk:
+```
+# Implied total variance (from VIX construction)
+IV_t = (VIX_t / 100)² / 12   # monthly
+
+# Implied jump variance ≈ price of deep OTM puts + calls above/below threshold k*
+# Requires option prices at strikes below ~80% and above ~120% of spot
+# Not available without access to full options chain
+```
+
+**Practical approximation** when full option chain is unavailable:
+```
+# Use high-frequency data to estimate BV and JV
+# Jump risk premium ≈ JV_t (realized jump variance as proxy for jump fear)
+# Normalize with z or pct over rolling window
+JRP_t = JV_t   # jump risk premium proxy
+```
+
+Interpretation: JRP spikes around market dislocations (Flash Crash, Lehman, COVID). It rises faster than continuous vol during sudden regime transitions, making it a useful leading indicator of tail-event regimes. Normalize with `pct`.
+
+**Reference:** Barndorff-Nielsen, Shephard (2004) Power and bipower variation with stochastic volatility and jumps. Journal of Financial Econometrics. https://doi.org/10.1093/jjfinec/nbh001
 
 ## Scoring (proposed)
 
@@ -690,6 +741,8 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 
 - Bollerslev, Tauchen, Zhou (2009). Expected stock returns and variance risk premia. Review of Financial Studies. https://scholars.duke.edu/individual/pub732839
 - Barndorff-Nielsen, Shephard (2002). Econometric analysis of realized volatility and its use in estimating stochastic volatility models. Journal of the Royal Statistical Society B. https://doi.org/10.1111/1467-9868.00336
+- Barndorff-Nielsen, Shephard (2004). Power and bipower variation with stochastic volatility and jumps. Journal of Financial Econometrics. https://doi.org/10.1093/jjfinec/nbh001
+- Bollerslev, Todorov (2011). Tails, fears, and risk premia. Journal of Finance. https://doi.org/10.1111/j.1540-6261.2011.01695.x
 - Bollerslev, Todorov, Xu (2015). Tail risk premia and return predictability. Journal of Financial Economics. https://scholars.duke.edu/publication/1060835
 - Bollerslev, Marrone, Xu, Zhou (2014). Stock return predictability and variance risk premia: international evidence. Journal of Financial and Quantitative Analysis. https://www.cambridge.org/core/journals/journal-of-financial-and-quantitative-analysis/article/abs/stock-return-predictability-and-variance-risk-premia-statistical-inference-and-international-evidence/0BE5DE1D942A0342DDBA24D7BFBEA5C8
 - Bekaert, Hoerova (2014). The VIX, the variance premium and stock market volatility. Journal of Econometrics. https://www.nber.org/papers/w18995
@@ -786,6 +839,11 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 - Kaminsky, Reinhart (1999). The twin crises: the causes of banking and balance-of-payments problems. American Economic Review. https://doi.org/10.1257/aer.89.3.473
 - Calvo (1998). Capital flows and capital-market crises: the simple economics of sudden stops. Journal of Applied Economics. https://doi.org/10.1080/15140326.1998.12040516
 - Forbes, Rigobon (2002). No contagion, only interdependence: measuring stock market comovements. Journal of Finance. https://doi.org/10.1111/0022-1082.00494
+
+### Text and sentiment
+
+- Loughran, McDonald (2011). When is a liability not a liability? Textual analysis, dictionaries, and 10-Ks. Journal of Finance. https://doi.org/10.1111/j.1540-6261.2010.01625.x — foundational financial NLP sentiment dictionary; general-purpose dictionaries (Harvard IV-4) misclassify common financial terms.
+- Baker, Bloom, Davis (2016). Measuring economic policy uncertainty. Quarterly Journal of Economics. https://doi.org/10.1093/qje/qjw024
 
 ## People to watch
 
