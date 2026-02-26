@@ -279,6 +279,8 @@ Researchers and groups to monitor for new papers in this space.
 - Robert N. Gantner
 - Xavier Gabaix
 - Nassim Nicholas Taleb
+- Paul Embrechts
+- Rama Cont
 
 ### Volatility term structure and options
 
@@ -316,6 +318,9 @@ Researchers and groups to monitor for new papers in this space.
 - Terrence Hendershott
 - Marc Potters
 - Fabrizio Lillo
+- Jim Gatheral
+- Mathieu Rosenbaum
+- Charles-Albert Lehalle
 
 ### Financial stress indices and systemic risk
 
@@ -332,6 +337,7 @@ Researchers and groups to monitor for new papers in this space.
 - Andrew Lo
 - Olivier Scaillet
 - Markus Pelger
+- Jon Danielsson
 
 ### Regime-switching
 
@@ -339,6 +345,7 @@ Researchers and groups to monitor for new papers in this space.
 - Andrew Ang
 - Allan Timmermann
 - Roger Farmer
+- Lars Hansen
 
 ### Credit spreads and macro
 
@@ -358,3 +365,4 @@ Researchers and groups to monitor for new papers in this space.
 - Tobias Adrian
 - Richard Crump
 - Emanuel Moench
+- John Campbell
