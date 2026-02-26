@@ -2,18 +2,41 @@
 
 A research project for detecting market regime shifts — transitions between risk-on and risk-off states — by combining signals from multiple traditions: variance risk premium, liquidity and funding stress, tail-risk and crash diagnostics, credit and macro indicators, and systemic risk measures. The goal is transparent, inspectable signals grounded in the academic literature, not black-box scores.
 
+## Contents
+
+- [Goals](#goals)
+- [Planned structure](#planned-structure)
+- [Data sources](#data-sources)
+- [Theoretical frameworks](#theoretical-frameworks)
+- [Signals](#signals-planned)
+- [Algorithm details](#algorithm-details)
+- [Scoring](#scoring-proposed)
+- [Evaluation](#evaluation-proposed)
+- [Financial regimes and the business cycle](#financial-regimes-and-the-business-cycle)
+- [International regimes and contagion](#international-regimes-and-contagion)
+- [Implementation notes](#implementation-notes)
+- [References](#references)
+- [People to watch](#people-to-watch)
+
 ## Not financial advice
 
 This project is for research and educational purposes only. Nothing here is investment advice or a recommendation to buy or sell any security or digital asset. Use at your own risk.
 
 ## Goals
 
-- Provide transparent, inspectable signals (not black boxes).
+- Provide transparent, inspectable signals grounded in the academic literature — not black boxes.
 - Combine multiple families of indicators:
-  - Tail-risk / crash hazard measures (fat-tail diagnostics).
-  - Variance risk premium (implied vs realized variance).
-  - Liquidity / impact proxies (order-book or market microstructure).
-- Emit a simple regime label (e.g., risk-on, neutral, risk-off) plus confidence notes.
+  - Macro stress (financial stress indices: OFR FSI, STLFSI)
+  - Variance risk premium (implied vs realized variance)
+  - Volatility regime (VIX term structure, skew, MOVE, VVIX)
+  - Liquidity and funding stress (spreads, Amihud, order flow imbalance)
+  - Credit and macro (credit spreads, yield curve, term premium)
+  - Systemic risk and contagion (CoVaR, MES, SRISK)
+  - Cross-asset structure (correlations, positioning, flows)
+  - Text and sentiment (FOMC tone, news uncertainty)
+- Emit a regime label (risk-on / neutral / risk-off) with confidence score and per-bucket contributors.
+- Support evaluation against known stress episodes and recession indicators.
+- Ground all signals, algorithms, and design choices in the academic literature.
 
 ## Planned structure
 
@@ -64,6 +87,7 @@ Key series IDs:
 | Fed funds rate | `DFF` | Daily | |
 | NBER recession | `USREC` | Monthly | 1=recession; useful for validation |
 | EPU index | `USEPUINDXD` | Daily | Baker-Bloom-Davis uncertainty |
+| Chicago Fed NFCI | `NFCI` | Weekly | Financial conditions index; positive = tighter than average |
 
 Note: TED spread (`TEDRATE`) was discontinued April 2022. Substitute: 3-month T-bill vs. SOFR.
 
@@ -122,7 +146,7 @@ This framework explains *why* funding stress, credit spreads, and equity volatil
 
 ## Signals (planned)
 
-Signals are grouped into thematic families. Each entry in the spec below lists the data source, raw measurement, and normalization method. Not all signals are available for free; see Data availability above.
+Signals are grouped into thematic families. Each entry in the spec below lists the data source, raw measurement, and normalization method. Not all signals are available for free; see Data sources above.
 
 ### Signals spec
 
@@ -133,7 +157,6 @@ This section defines each planned signal, its data source, and a suggested norma
 - `value`: raw measurement
 - `z`: z-score over a rolling window (default 3Y if daily, 5Y if weekly)
 - `pct`: percentile rank over a rolling window
-- `ema`: exponential moving average
 
 **Macro stress**
 
@@ -157,7 +180,7 @@ This section defines each planned signal, its data source, and a suggested norma
   - Raw: index level
   - Normalize: `z`
 - MOVE index
-  - Source: ICE BofA MOVE
+  - Source: ICE BofA MOVE; not on FRED; typically via Bloomberg or paid data providers
   - Raw: index level
   - Normalize: `z`
 - VVIX (vol-of-vol)
@@ -215,6 +238,10 @@ This section defines each planned signal, its data source, and a suggested norma
 - Cross-asset correlation spike
   - Source: rolling correlations (equity-credit, equity-rates, equity-commodities)
   - Raw: correlation level or delta
+  - Normalize: `z`
+- Cross-asset correlation eigenvalue
+  - Source: rolling covariance matrix of equity, credit, rates, commodities
+  - Raw: largest eigenvalue of rolling correlation matrix (concentration = systemic co-movement)
   - Normalize: `z`
 
 **Positioning and flows**
@@ -333,7 +360,7 @@ Transition matrix P:  P[i,j] = P(s_t=j | s_{t-1}=i)
 
 **Forward filter (Hamilton filter):**
 ```
-Initialize: ξ_{0|0} = stationary distribution of P
+Initialize: ξ_{0|0} = [0.5, 0.5] (or uniform prior); update to stationary distribution after parameter estimation converges
 For t = 1..T:
   Predict: ξ_{t|t-1}[j] = Σ_i P[i,j] * ξ_{t-1|t-1}[i]
   Densities: η_t[j] = N(y_t; μ_j, σ_j²)
@@ -653,7 +680,8 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 
 ### Volatility term structure
 
-- VIX term structure and contango/backwardation. Journal of Risk and Financial Management (2019). https://www.mdpi.com/1911-8074/12/3/113
+- Whaley (2000). The investor fear gauge. Journal of Portfolio Management. https://doi.org/10.3905/jpm.2000.319728
+- Carr, Wu (2006). A tale of two indices. Journal of Derivatives. https://doi.org/10.3905/jod.2006.616186
 
 ### Market structure & crash propagation
 
@@ -663,14 +691,19 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 
 - Scheffer, Carpenter, Foley, Folke, Walker (2001). Catastrophic shifts in ecosystems. Nature. https://doi.org/10.1038/35098000
 - Scheffer et al. (2009). Early-warning signals for critical transitions. Nature. https://doi.org/10.1038/nature08227
+- Dakos et al. (2008). Slowing down as an early warning signal for abrupt climate change. PNAS. https://doi.org/10.1073/pnas.0802430105
 
 ### Hawkes processes in finance
 
+- Hawkes (1971). Spectra of some self-exciting and mutually exciting point processes. Biometrika. https://doi.org/10.1093/biomet/58.1.83
 - Bacry, Mastromatteo, Muzy (2015). Hawkes processes in finance. Market Microstructure and Liquidity. https://doi.org/10.1142/S2382626615500057
+- Filimonov, Sornette (2012). Quantifying reflexivity in financial markets: toward a prediction of flash crashes. Physical Review E. https://doi.org/10.1103/PhysRevE.85.056108
 
 ### Rough volatility
 
 - Gatheral, Jaisson, Rosenbaum (2018). Volatility is rough. Quantitative Finance. https://doi.org/10.1080/14697688.2017.1393551
+- El Euch, Rosenbaum (2019). The characteristic function of rough Heston models. Mathematical Finance. https://doi.org/10.1111/mafi.12173
+- Cont (2001). Empirical properties of asset returns: stylized facts and statistical issues. Quantitative Finance. https://doi.org/10.1080/713665670
 
 ### Intermediary asset pricing
 
@@ -687,6 +720,7 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 
 - Acemoglu, Ozdaglar, Tahbaz-Salehi (2015). Systemic risk and stability in financial networks. American Economic Review. https://doi.org/10.1257/aer.20130456
 - Elliott, Golub, Jackson (2014). Financial networks and contagion. American Economic Review. https://doi.org/10.1257/aer.104.10.3115
+- Battiston, Puliga, Kaushik, Tasca, Caldarelli (2012). DebtRank: Too central to fail? Scientific Reports. https://doi.org/10.1038/srep00541
 
 ### Business cycle and financial conditions
 
