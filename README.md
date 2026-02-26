@@ -5,22 +5,18 @@ A research project for detecting market regime shifts — transitions between ri
 ## Contents
 
 - [Goals](#goals)
-- [Planned structure](#planned-structure)
-- [Data sources](#data-sources)
 - [Theoretical frameworks](#theoretical-frameworks)
-- [Signals](#signals-planned)
-- [Algorithm details](#algorithm-details)
-- [Scoring](#scoring-proposed)
-- [Evaluation](#evaluation-proposed)
 - [Financial regimes and the business cycle](#financial-regimes-and-the-business-cycle)
 - [International regimes and contagion](#international-regimes-and-contagion)
+- [Data sources](#data-sources)
+- [Signals](#signals)
+- [Algorithm details](#algorithm-details)
+- [Scoring](#scoring)
+- [Evaluation](#evaluation)
 - [Implementation notes](#implementation-notes)
+- [Project](#project)
 - [References](#references)
 - [People to watch](#people-to-watch)
-
-## Not financial advice
-
-This project is for research and educational purposes only. Nothing here is investment advice or a recommendation to buy or sell any security or digital asset. Use at your own risk.
 
 ## Goals
 
@@ -38,21 +34,104 @@ This project is for research and educational purposes only. Nothing here is inve
 - Support evaluation against known stress episodes and recession indicators.
 - Ground all signals, algorithms, and design choices in the academic literature.
 
-## Planned structure
+## Theoretical frameworks
 
-- `src/` Rust core for data ingestion, feature computation, and signal aggregation.
-- `python/` optional ML/AI experiments when Rust is not ideal.
-- `data/` optional cached datasets or example fixtures.
+Different schools offer distinct explanations of what a regime is and how transitions occur. Understanding the tension between them is important: this project draws on all of them, but they are not always compatible.
 
-## Status
+### The core tension: statistical vs. physical approaches
 
-Scaffold only. Implementation TBD.
+**Hamilton's regime-switching** treats regimes as latent discrete states inferred from data. The model is agnostic about what causes transitions — it estimates a transition matrix from history and outputs a probability distribution over states. It is statistically rigorous and well-understood, but it assumes a fixed number of regimes and stationary dynamics. It cannot predict when the next transition will occur; it can only tell you which regime you are probably in right now.
 
-## Config and output schema
+**Sornette's LPPL framework** treats regime endings as deterministic critical points driven by endogenous positive feedback (herding, leverage spirals). The approach is forward-looking — it aims to forecast crash timing — and is grounded in statistical physics rather than econometrics. But it is harder to validate out of sample and sensitive to fitting assumptions. It views markets as driven toward criticality, not randomly switching between stable states.
 
-- Example config: `config.example.toml`
-- Output schema: `signals.schema.json`
-- Sample output: `signals.sample.json`
+These are genuinely different ontologies. Hamilton says regimes are states you infer; Sornette says crashes are events you can anticipate. Most of the other frameworks below sit between these poles or address different aspects of the same phenomenon.
+
+### Critical slowing down (Scheffer et al.)
+
+Near a tipping point, systems recover more slowly from small perturbations. Observable signatures: rising variance, rising autocorrelation, and rising cross-correlation across variables as the system approaches a bifurcation. Practical use: monitor rolling variance and AR(1) coefficient of key signals — acceleration in both is a warning independent of any specific model. This is the empirical complement to Sornette's theoretical prediction.
+
+### Hawkes processes and event clustering (Bacry, Muzy, Jaisson)
+
+Extreme events cluster in time due to self-excitation: each event raises the probability of further events. Regime transitions appear as shifts in the branching ratio (ratio of triggered to background events). A branching ratio approaching 1 signals a system near criticality. Applies to order flow, volatility spikes, and default events. Provides a middle ground: more data-driven than LPPL, more mechanistic than Hamilton.
+
+### Rough volatility (Gatheral, Rosenbaum)
+
+Realized volatility has a Hurst exponent H ≈ 0.1, far below 0.5. Volatility is rougher than a random walk and has long-range anti-persistence at short scales. Standard GARCH-based models underestimate short-term vol clustering; rough vol models better capture the rapid spikes that precede stress regimes. Practically relevant for calibrating VRP and vol-of-vol signals.
+
+### Intermediary asset pricing (Adrian, Shin, He, Krishnamurthy)
+
+Leverage and balance-sheet constraints of financial intermediaries drive risk premia and liquidity. When intermediary capital is scarce, risk premia spike and liquidity dries up simultaneously — a defining signature of risk-off regimes. Provides a unified micro-foundation for why credit spreads, VRP, and funding stress co-move at regime transitions, something neither Hamilton nor Sornette explains directly.
+
+### Minsky's Financial Instability Hypothesis
+
+Hyman Minsky argued that stability is destabilizing: long periods of calm encourage risk-taking, leverage, and the migration of borrowers from hedge finance (cash flows cover debt service) to speculative finance (cash flows cover only interest) to Ponzi finance (cash flows cover neither — survival depends on asset appreciation). This endogenous build-up of fragility eventually collapses under its own weight.
+
+This is the conceptual precursor to Brunnermeier's funding liquidity spirals and Geanakoplos's leverage cycle. Minsky's framework suggests that regime-shift risk is highest after extended periods of low volatility and tight credit spreads — precisely when most models signal calm. Practically: low VRP, compressed credit spreads, and rising leverage ratios together are a Minsky-style warning even when no individual signal crosses a threshold.
+
+### Financial network contagion (Acemoglu, Ozdaglar, Elliott, Golub, Jackson)
+
+The topology of the financial network determines whether idiosyncratic shocks amplify into systemic crises. Key result: dense interconnection is "robust yet fragile" — the network absorbs small shocks but amplifies large ones past a critical threshold. When a major node fails, losses cascade through counterparty exposures.
+
+DebtRank (Battiston et al. 2012) quantifies each node's systemic importance: how much economic value is lost if it defaults. Unlike CoVaR and SRISK, which measure statistical co-movement, DebtRank captures the transmission mechanism through the balance-sheet network.
+
+This framework explains *why* funding stress, credit spreads, and equity volatility co-move at regime transitions: the network of counterparty exposures transmits and amplifies the initial shock. Practical signal: aggregate DebtRank or eigenvector centrality of major financial institutions; rising concentration of centrality = increasing fragility.
+
+## Financial regimes and the business cycle
+
+Financial regimes are not the same as business cycles, but they are closely related.
+
+### Distinctions
+
+- Not all recessions follow financial stress: the 2020 COVID shock was an external event with financial amplification, not a financial cycle peak.
+- Not all financial stress causes recessions: the 2011 EU sovereign crisis was severe stress in Europe but only a soft patch in the US.
+- Financial regime signals aim to be real-time; NBER recession dating is ex-post by 6–12 months.
+- Financial regimes operate at shorter horizons (weeks to months); business cycles at longer horizons (years).
+
+### Yield curve as recession predictor
+
+The 10Y-3M spread (FRED: `T10Y3M`) has inverted before every US recession since 1960 with a lead of ~12 months. Estrella and Mishkin (1998) formalize this as a probit model. The 10Y-2Y spread is more widely watched but 10Y-3M has stronger empirical predictive power. A spread below zero for 3+ months implies elevated recession probability.
+
+### Financial conditions indices
+
+The Chicago Fed NFCI (FRED: `NFCI`, weekly) aggregates 105 indicators across money markets, debt markets, equity markets, and shadow banking. Positive = tighter than average. Correlation with OFR FSI is high but they capture different aspects; using both adds coverage.
+
+### Typical sequence in a financially-driven recession
+
+1. Credit spreads widen (6–18 months before recession onset)
+2. Yield curve inverts (12–18 months before onset)
+3. Equity market peaks (6–9 months before onset)
+4. Financial stress indices spike (contemporaneous with onset)
+5. NBER calls the recession start (6–12 months after onset)
+
+A risk-off regime signal does not guarantee recession; it signals elevated probability. Use FRED `USREC` as the primary validation benchmark: does risk-off predict `USREC=1` in the subsequent 3–12 months at above-base-rate frequency?
+
+## International regimes and contagion
+
+Regime shifts propagate across borders through three channels:
+
+1. **Trade**: recession in one country reduces demand for exports, spreading weakness.
+2. **Financial**: common lenders, cross-border holdings, global funding markets. A US money market fund run (2008, 2020) instantly affects European bank funding.
+3. **Information/confidence**: a shock in one market updates beliefs globally, triggering correlated repositioning even where fundamentals are unchanged.
+
+### Twin crises and sudden stops
+
+Kaminsky and Reinhart (1999) document the "twin crises" pattern: banking crises and currency crises tend to occur together and reinforce each other. Leading indicators: reserve depletion, M2/reserves ratio, credit growth, current account deficit, real exchange rate overvaluation.
+
+Calvo (1998) defines sudden stops as large rapid reversals in capital inflows — the primary crisis trigger in emerging markets. Vulnerability indicators: current account deficit size, foreign currency debt share, reserve adequacy.
+
+### BIS credit-to-GDP gap
+
+The BIS credit-to-GDP gap (credit/GDP relative to its long-run trend) is the single best cross-country leading indicator of banking crises. The empirical basis for Basel III countercyclical capital buffer requirements. A gap above +10pp signals elevated banking crisis risk within 1–3 years. Available quarterly from https://www.bis.org/statistics/c_gaps.htm.
+
+### Contagion vs. fundamentals
+
+Forbes and Rigobon (2002) show that apparent cross-country correlation increases during crises largely disappear after correcting for heteroscedasticity — what looks like contagion is often common fundamentals being revealed simultaneously. True contagion is propagation beyond what fundamentals justify. This matters for signal interpretation: a cross-asset correlation spike may be information, not amplification.
+
+### Cross-country data sources
+
+- BIS credit-to-GDP gap: https://www.bis.org/statistics/c_gaps.htm
+- IMF Global Financial Stability Report: https://www.imf.org/en/Publications/GFSR
+- Chicago Fed NFCI: FRED `NFCI`
 
 ## Data sources
 
@@ -113,55 +192,9 @@ Note: Cboe data is free for personal/research use but has redistribution restric
 Weekly Commitments of Traders reports: https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm
 Published every Friday for positions as of the prior Tuesday (3-day lag). Download as CSV or use the CFTC API. Key fields: net speculative positions (large traders, non-commercial) for equity index, Treasury, and commodity futures.
 
-## Theoretical frameworks
+## Signals
 
-Different schools offer distinct explanations of what a regime is and how transitions occur. Understanding the tension between them is important: this project draws on all of them, but they are not always compatible.
-
-### The core tension: statistical vs. physical approaches
-
-**Hamilton's regime-switching** treats regimes as latent discrete states inferred from data. The model is agnostic about what causes transitions — it estimates a transition matrix from history and outputs a probability distribution over states. It is statistically rigorous and well-understood, but it assumes a fixed number of regimes and stationary dynamics. It cannot predict when the next transition will occur; it can only tell you which regime you are probably in right now.
-
-**Sornette's LPPL framework** treats regime endings as deterministic critical points driven by endogenous positive feedback (herding, leverage spirals). The approach is forward-looking — it aims to forecast crash timing — and is grounded in statistical physics rather than econometrics. But it is harder to validate out of sample and sensitive to fitting assumptions. It views markets as driven toward criticality, not randomly switching between stable states.
-
-These are genuinely different ontologies. Hamilton says regimes are states you infer; Sornette says crashes are events you can anticipate. Most of the other frameworks below sit between these poles or address different aspects of the same phenomenon.
-
-### Critical slowing down (Scheffer et al.)
-
-Near a tipping point, systems recover more slowly from small perturbations. Observable signatures: rising variance, rising autocorrelation, and rising cross-correlation across variables as the system approaches a bifurcation. Practical use: monitor rolling variance and AR(1) coefficient of key signals — acceleration in both is a warning independent of any specific model. This is the empirical complement to Sornette's theoretical prediction.
-
-### Hawkes processes and event clustering (Bacry, Muzy, Jaisson)
-
-Extreme events cluster in time due to self-excitation: each event raises the probability of further events. Regime transitions appear as shifts in the branching ratio (ratio of triggered to background events). A branching ratio approaching 1 signals a system near criticality. Applies to order flow, volatility spikes, and default events. Provides a middle ground: more data-driven than LPPL, more mechanistic than Hamilton.
-
-### Rough volatility (Gatheral, Rosenbaum)
-
-Realized volatility has a Hurst exponent H ≈ 0.1, far below 0.5. Volatility is rougher than a random walk and has long-range anti-persistence at short scales. Standard GARCH-based models underestimate short-term vol clustering; rough vol models better capture the rapid spikes that precede stress regimes. Practically relevant for calibrating VRP and vol-of-vol signals.
-
-### Intermediary asset pricing (Adrian, Shin, He, Krishnamurthy)
-
-Leverage and balance-sheet constraints of financial intermediaries drive risk premia and liquidity. When intermediary capital is scarce, risk premia spike and liquidity dries up simultaneously — a defining signature of risk-off regimes. Provides a unified micro-foundation for why credit spreads, VRP, and funding stress co-move at regime transitions, something neither Hamilton nor Sornette explains directly.
-
-### Minsky's Financial Instability Hypothesis
-
-Hyman Minsky argued that stability is destabilizing: long periods of calm encourage risk-taking, leverage, and the migration of borrowers from hedge finance (cash flows cover debt service) to speculative finance (cash flows cover only interest) to Ponzi finance (cash flows cover neither — survival depends on asset appreciation). This endogenous build-up of fragility eventually collapses under its own weight.
-
-This is the conceptual precursor to Brunnermeier's funding liquidity spirals and Geanakoplos's leverage cycle. Minsky's framework suggests that regime-shift risk is highest after extended periods of low volatility and tight credit spreads — precisely when most models signal calm. Practically: low VRP, compressed credit spreads, and rising leverage ratios together are a Minsky-style warning even when no individual signal crosses a threshold.
-
-### Financial network contagion (Acemoglu, Ozdaglar, Elliott, Golub, Jackson)
-
-The topology of the financial network determines whether idiosyncratic shocks amplify into systemic crises. Key result: dense interconnection is "robust yet fragile" — the network absorbs small shocks but amplifies large ones past a critical threshold. When a major node fails, losses cascade through counterparty exposures.
-
-DebtRank (Battiston et al. 2012) quantifies each node's systemic importance: how much economic value is lost if it defaults. Unlike CoVaR and SRISK, which measure statistical co-movement, DebtRank captures the transmission mechanism through the balance-sheet network.
-
-This framework explains *why* funding stress, credit spreads, and equity volatility co-move at regime transitions: the network of counterparty exposures transmits and amplifies the initial shock. Practical signal: aggregate DebtRank or eigenvector centrality of major financial institutions; rising concentration of centrality = increasing fragility.
-
-## Signals (planned)
-
-Signals are grouped into thematic families. Each entry in the spec below lists the data source, raw measurement, and normalization method. Not all signals are available for free; see Data sources above.
-
-### Signals spec
-
-This section defines each planned signal, its data source, and a suggested normalization method.
+Signals are grouped into thematic families. Each entry lists the data source, raw measurement, and normalization method. Not all signals are available for free; see [Data sources](#data-sources).
 
 **Conventions**
 
@@ -375,6 +408,50 @@ VRP > 0: investors paying for variance protection (normal).
 VRP < 0: realized vol exceeds implied vol (already stressed).
 High positive VRP predicts positive equity returns at quarterly horizon (Bollerslev, Tauchen, Zhou 2009).
 
+### Jump risk / tail-risk premium
+
+The variance risk premium conflates two components: compensation for continuous vol fluctuations and compensation for jump risk. Bollerslev and Todorov (2011) show that the jump component dominates return predictability.
+
+**Step 1: Decompose realized variance using BNS bipower variation (Barndorff-Nielsen, Shephard 2004).**
+
+Bipower variation is robust to jumps; realized variance is not. Their difference estimates jump variance:
+```
+# Bipower variation (using adjacent absolute returns, scaled)
+BV_t = (π/2) * (1/(W-1)) * Σ_{i=t-W+2}^{t} |r_i| * |r_{i-1}|
+
+# Continuous component (jump-robust)
+CV_t = BV_t
+
+# Jump component (floored at 0 to avoid negative estimates)
+JV_t = max(RV_t - BV_t, 0)
+```
+The BNS jump test statistic (for detecting whether JV_t is significant on a given day):
+```
+z_jump = (RV_t - BV_t) / sqrt(variance_of_RV - BV_t)
+```
+Use the realized tri-power quarticity for the denominator variance (see Barndorff-Nielsen, Shephard 2004 for the full formula).
+
+**Step 2: Estimate implied jump variance from options.**
+
+A model-free approach (Bollerslev-Todorov 2011) decomposes the VRP using deep out-of-the-money (OTM) option prices, which primarily reflect jump risk:
+```
+# Implied total variance (from VIX construction)
+IV_t = (VIX_t / 100)² / 12   # monthly
+
+# Implied jump variance ≈ price of deep OTM puts + calls above/below threshold k*
+# Requires option prices at strikes below ~80% and above ~120% of spot
+# Not available without access to full options chain
+```
+
+**Practical approximation** when full option chain is unavailable:
+```
+# Use high-frequency data to estimate BV and JV
+# Jump risk premium ≈ JV_t (realized jump variance as proxy for jump fear)
+JRP_t = JV_t   # jump risk premium proxy
+```
+
+Interpretation: JRP spikes around market dislocations (Flash Crash, Lehman, COVID). It rises faster than continuous vol during sudden regime transitions, making it a useful leading indicator of tail-event regimes. Normalize with `pct`.
+
 ### Rolling z-score
 
 ```
@@ -422,7 +499,7 @@ Output: ξ_{t|t}[1] = P(s_t = stressed | data_1..t)
 
 **Parameter estimation:** EM (Baum-Welch) or direct MLE via Nelder-Mead. Initial values: set μ_0/σ_0 from calm periods, μ_1/σ_1 from crisis periods (2008, 2020). Use log-space for numerical stability. Multiple random restarts to avoid local optima.
 
-**Number of states:** The canonical model uses K=2 states (normal vs. stressed). A K=3 model (expansion / neutral / contraction) adds resolution but requires substantially more data and has K*(K-1) = 6 free transition parameters vs. 2 for K=2. Use K=3 only if you have strong evidence that a third state is empirically distinct (e.g., rapid expansion clearly separated from slow growth). More states increase overfitting risk. For a regime indicator, K=2 is the safe default; validate with AIC/BIC and out-of-sample persistence of inferred regimes.
+**Number of states:** The canonical model uses K=2 states (normal vs. stressed). A K=3 model (expansion / neutral / contraction) adds resolution but requires substantially more data and has K*(K-1) = 6 free transition parameters vs. 2 for K=2. Use K=3 only if you have strong evidence that a third state is empirically distinct. More states increase overfitting risk. For a regime indicator, K=2 is the safe default; validate with AIC/BIC and out-of-sample persistence of inferred regimes.
 
 ### LPPL fitting
 
@@ -469,54 +546,7 @@ Analytic gradient available. Optimize with L-BFGS-B. Bounds: μ > 0, α ≥ 0, �
 
 **Event definition:** VIX threshold crossings `VIX_t > VIX_{t-1} + 1.5·σ`, or large order flow imbalances. Estimate on 252-day rolling window. Rolling n approaching 1 is a warning signal.
 
-### Jump risk / tail-risk premium
-
-The variance risk premium (VRP) conflates two components: compensation for continuous vol fluctuations and compensation for jump risk. Bollerslev and Todorov (2011, 2014) show that the jump component dominates return predictability.
-
-**Step 1: Decompose realized variance using BNS bipower variation (Barndorff-Nielsen, Shephard 2004).**
-
-Bipower variation is robust to jumps; realized variance is not. Their difference estimates jump variance:
-```
-# Bipower variation (using adjacent absolute returns, scaled)
-BV_t = (π/2) * (1/(W-1)) * Σ_{i=t-W+2}^{t} |r_i| * |r_{i-1}|
-
-# Continuous component (jump-robust)
-CV_t = BV_t
-
-# Jump component (floored at 0 to avoid negative estimates)
-JV_t = max(RV_t - BV_t, 0)
-```
-The BNS jump test statistic (for detecting whether JV_t is significant on a given day):
-```
-z_jump = (RV_t - BV_t) / sqrt(variance_of_RV - BV_t)
-```
-Use the realized tri-power quarticity for the denominator variance (see Barndorff-Nielsen, Shephard 2004 for the full formula).
-
-**Step 2: Estimate implied jump variance from options.**
-
-A model-free approach (Bollerslev-Todorov 2011) decomposes the VRP using deep out-of-the-money (OTM) option prices, which primarily reflect jump risk:
-```
-# Implied total variance (from VIX construction)
-IV_t = (VIX_t / 100)² / 12   # monthly
-
-# Implied jump variance ≈ price of deep OTM puts + calls above/below threshold k*
-# Requires option prices at strikes below ~80% and above ~120% of spot
-# Not available without access to full options chain
-```
-
-**Practical approximation** when full option chain is unavailable:
-```
-# Use high-frequency data to estimate BV and JV
-# Jump risk premium ≈ JV_t (realized jump variance as proxy for jump fear)
-# Normalize with z or pct over rolling window
-JRP_t = JV_t   # jump risk premium proxy
-```
-
-Interpretation: JRP spikes around market dislocations (Flash Crash, Lehman, COVID). It rises faster than continuous vol during sudden regime transitions, making it a useful leading indicator of tail-event regimes. Normalize with `pct`.
-
-**Reference:** Barndorff-Nielsen, Shephard (2004) Power and bipower variation with stochastic volatility and jumps. Journal of Financial Econometrics. https://doi.org/10.1093/jjfinec/nbh001
-
-## Scoring (proposed)
+## Scoring
 
 We combine normalized signals into a regime score in three steps:
 
@@ -565,7 +595,7 @@ Also expose:
 - `confidence = min(1, |regime_score| / 2)`
 - `contributors`: top-3 buckets by absolute impact
 
-## Evaluation (proposed)
+## Evaluation
 
 A regime signal is only useful if it predicts something. Candidate target variables and evaluation approaches:
 
@@ -595,63 +625,6 @@ Signals differ in how quickly they react to regime transitions. A rough taxonomy
 - **Potentially leading**: critical slowing down indicators (rising variance + autocorrelation), LPPL fit, branching ratio from Hawkes model
 
 In the scoring formula, fast signals should dominate for short-horizon regime calls; slower signals provide structural context.
-
-## Financial regimes and the business cycle
-
-Financial regimes are not the same as business cycles, but they are closely related.
-
-### Distinctions
-
-- Not all recessions follow financial stress: the 2020 COVID shock was an external event with financial amplification, not a financial cycle peak.
-- Not all financial stress causes recessions: the 2011 EU sovereign crisis was severe stress in Europe but only a soft patch in the US.
-- Financial regime signals aim to be real-time; NBER recession dating is ex-post by 6–12 months.
-- Financial regimes operate at shorter horizons (weeks to months); business cycles at longer horizons (years).
-
-### Yield curve as recession predictor
-
-The 10Y-3M spread (FRED: `T10Y3M`) has inverted before every US recession since 1960 with a lead of ~12 months. Estrella and Mishkin (1998) formalize this as a probit model. The 10Y-2Y spread is more widely watched but 10Y-3M has stronger empirical predictive power. A spread below zero for 3+ months implies elevated recession probability.
-
-### Financial conditions indices
-
-The Chicago Fed NFCI (FRED: `NFCI`, weekly) aggregates 105 indicators across money markets, debt markets, equity markets, and shadow banking. Positive = tighter than average. Correlation with OFR FSI is high but they capture different aspects; using both adds coverage.
-
-### Typical sequence in a financially-driven recession
-
-1. Credit spreads widen (6–18 months before recession onset)
-2. Yield curve inverts (12–18 months before onset)
-3. Equity market peaks (6–9 months before onset)
-4. Financial stress indices spike (contemporaneous with onset)
-5. NBER calls the recession start (6–12 months after onset)
-
-A risk-off regime signal does not guarantee recession; it signals elevated probability. Use FRED `USREC` as the primary validation benchmark: does risk-off predict `USREC=1` in the subsequent 3–12 months at above-base-rate frequency?
-
-## International regimes and contagion
-
-Regime shifts propagate across borders through three channels:
-
-1. **Trade**: recession in one country reduces demand for exports, spreading weakness.
-2. **Financial**: common lenders, cross-border holdings, global funding markets. A US money market fund run (2008, 2020) instantly affects European bank funding.
-3. **Information/confidence**: a shock in one market updates beliefs globally, triggering correlated repositioning even where fundamentals are unchanged.
-
-### Twin crises and sudden stops
-
-Kaminsky and Reinhart (1999) document the "twin crises" pattern: banking crises and currency crises tend to occur together and reinforce each other. Leading indicators: reserve depletion, M2/reserves ratio, credit growth, current account deficit, real exchange rate overvaluation.
-
-Calvo (1998) defines sudden stops as large rapid reversals in capital inflows — the primary crisis trigger in emerging markets. Vulnerability indicators: current account deficit size, foreign currency debt share, reserve adequacy.
-
-### BIS credit-to-GDP gap
-
-The BIS credit-to-GDP gap (credit/GDP relative to its long-run trend) is the single best cross-country leading indicator of banking crises. The empirical basis for Basel III countercyclical capital buffer requirements. A gap above +10pp signals elevated banking crisis risk within 1–3 years. Available quarterly from https://www.bis.org/statistics/c_gaps.htm.
-
-### Contagion vs. fundamentals
-
-Forbes and Rigobon (2002) show that apparent cross-country correlation increases during crises largely disappear after correcting for heteroscedasticity — what looks like contagion is often common fundamentals being revealed simultaneously. True contagion is propagation beyond what fundamentals justify. This matters for signal interpretation: a cross-asset correlation spike may be information, not amplification.
-
-### Cross-country data sources
-
-- BIS credit-to-GDP gap: https://www.bis.org/statistics/c_gaps.htm
-- IMF Global Financial Stability Report: https://www.imf.org/en/Publications/GFSR
-- Chicago Fed NFCI: FRED `NFCI`
 
 ## Implementation notes
 
@@ -734,6 +707,24 @@ Full signal availability for FRED-based signals starts around 2005 (limited by S
 | Statistics | `statrs` |
 | Date handling | `chrono` |
 | Parallel computation | `rayon` |
+
+## Project
+
+### Status
+
+Scaffold only. Implementation TBD.
+
+### Structure
+
+- `src/` — Rust core for data ingestion, feature computation, and signal aggregation.
+- `python/` — optional ML/AI experiments when Rust is not ideal.
+- `data/` — optional cached datasets or example fixtures.
+
+### Config and output schema
+
+- Example config: `config.example.toml`
+- Output schema: `signals.schema.json`
+- Sample output: `signals.sample.json`
 
 ## References
 
@@ -963,3 +954,7 @@ Researchers and groups to monitor for new papers in this space.
 - **Richard Crump** — ACM term premium model; term structure estimation
 - **Emanuel Moench** — ACM term premium model; factor models for yield curve
 - **John Campbell** — return predictability; yield curve; long-run risks; consumption-based pricing
+
+---
+
+*Not financial advice. This project is for research and educational purposes only. Nothing here is investment advice or a recommendation to buy or sell any security or digital asset. Use at your own risk.*
