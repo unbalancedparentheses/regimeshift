@@ -818,7 +818,7 @@ signals:
   # ... one entry per signal
 ```
 
-`null` means the signal was unavailable or in warmup. See `signals.sample.json` for a concrete example.
+`null` means the signal was unavailable or in warmup.
 
 ## References
 
