@@ -250,10 +250,10 @@ Also expose:
 
 ## People to watch
 
-Researchers and groups to monitor for new papers in this space:
+Researchers and groups to monitor for new papers in this space.
 
-- Didier Sornette
-- Jean-Philippe Bouchaud
+### Variance risk premium and realized volatility
+
 - Tim Bollerslev
 - George Tauchen
 - Hao Zhou
@@ -261,28 +261,92 @@ Researchers and groups to monitor for new papers in this space:
 - Lai Xu
 - Geert Bekaert
 - Marie Hoerova
+- Torben Andersen
+- Ole Barndorff-Nielsen
+- Neil Shephard
+- Nour Meddahi
+- Francis X. Diebold
+- Caio Almeida
+
+### Fat tails, power laws, and crash hazard
+
+- Didier Sornette
+- Jean-Philippe Bouchaud
+- Niklas Wheatley
+- Tobias Huber
+- Max Reppen
+- Robert N. Gantner
+- Xavier Gabaix
+- Nassim Nicholas Taleb
+
+### Volatility term structure and options
+
+- Liuren Wu
+- Gurdip Bakshi
+- Peter Carr
+- Jin-Chuan Duan
+
+### Liquidity and funding stress
+
 - Markus Brunnermeier
 - Lasse Heje Pedersen
 - Lubos Pastor
 - Robert Stambaugh
+- Hyun Song Shin
+- Darrell Duffie
+- Arvind Krishnamurthy
+- Dimitri Vayanos
+- Viral Acharya
+- Nicolae Garleanu
+
+### Market microstructure and price impact
+
+- Bence Toth
+- Yvan Lemperiere
+- Cecile Deremble
+- Jonathan Donier
+- Albert J. Menkveld
+- Yueshen Bian
+- Albert Kyle
+- Thierry Foucault
+- Maureen O'Hara
+- Tarun Chordia
+- Terrence Hendershott
+
+### Financial stress indices and systemic risk
+
+- Phillip Monin
 - Michael Flood
 - John Liechty
 - Krista Piontek
-- Phillip Monin
+- Jan Hatzius
+- Stijn Claessens
+- Robert Engle
+- Stefano Giglio
+- Bryan Kelly
+- Monica Billio
+
+### Regime-switching
+
+- James Hamilton
+- Andrew Ang
+- Allan Timmermann
+- Roger Farmer
+
+### Credit spreads and macro
+
+- Simon Gilchrist
+- Egon Zakrajsek
+- Mark Gertler
+- Ben Bernanke
+- Robert Merton
+- Francis Longstaff
+- John Geanakoplos
+
+### Term structure and bond risk premia
+
 - John Cochrane
 - Monika Piazzesi
 - Tobias Adrian
 - Richard Crump
 - Emanuel Moench
-- Simon Gilchrist
-- Egon Zakrajsek
-- Bence Toth
-- Yvan Lemperiere
-- Cecile Deremble
-- Jonathan Donier
-- Niklas Wheatley
-- Tobias Huber
-- Max Reppen
-- Robert N. Gantner
-- Albert J. Menkveld
-- Yueshen Bian
