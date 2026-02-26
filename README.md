@@ -56,6 +56,9 @@ This affects which signals are usable in an MVP vs a production system.
 - Vol-of-vol (e.g., VVIX) as a volatility-regime transition signal.
 - Positioning/flows (e.g., CFTC COT, ETF flows) as crowding/risk signals.
 - Funding stress spreads (e.g., SOFR-OIS, FRA-OIS, repo specials) as modern liquidity stress proxies.
+- Order flow imbalance (signed buy/sell volume) as a microstructure stress indicator.
+- Network/contagion measures (CoVaR, MES, SRISK) as systemic risk signals.
+- Text and sentiment signals (FOMC tone, news uncertainty) as forward-looking regime indicators.
 
 ### Signals spec
 
@@ -116,6 +119,10 @@ This section defines each planned signal, its data source, and a suggested norma
   - Source: exchange order book (when available)
   - Raw: top-of-book or X% depth
   - Normalize: `pct`
+- Order flow imbalance
+  - Source: exchange trade data or order book
+  - Raw: signed order flow (buy-initiated minus sell-initiated volume), normalized by total volume
+  - Normalize: `z`
 
 **Credit and macro**
 
@@ -155,6 +162,32 @@ This section defines each planned signal, its data source, and a suggested norma
 - ETF flows
   - Source: ETF flow data
   - Raw: net flows as % AUM
+  - Normalize: `z`
+
+**Systemic risk and contagion**
+
+- CoVaR (conditional VaR)
+  - Source: equity returns (Adrian-Brunnermeier method)
+  - Raw: ΔCoVaR — system VaR conditional on institution in distress minus unconditional
+  - Normalize: `z`
+- MES (marginal expected shortfall)
+  - Source: equity returns
+  - Raw: expected equity loss of a firm conditional on a market tail event
+  - Normalize: `z`
+- SRISK
+  - Source: equity returns and balance sheet data (Engle-Brownlees)
+  - Raw: expected capital shortfall in a crisis scenario
+  - Normalize: `z`
+
+**Text and sentiment**
+
+- FOMC communication tone
+  - Source: FOMC minutes and statements (NLP)
+  - Raw: hawkish/dovish score or policy uncertainty index
+  - Normalize: `z`
+- News-based uncertainty
+  - Source: Baker-Bloom-Davis Economic Policy Uncertainty index or similar NLP pipeline
+  - Raw: aggregate uncertainty or sentiment score
   - Normalize: `z`
 
 ## Scoring (proposed)
@@ -199,6 +232,34 @@ Also expose:
 
 - `confidence = min(1, |regime_score| / 2)`
 - `contributors`: top-3 buckets by absolute impact
+
+## Theoretical frameworks
+
+Different schools offer distinct explanations of what a regime is and how transitions occur. These are complementary rather than competing.
+
+### Statistical regime-switching (Hamilton)
+
+Regimes are latent discrete states inferred from observable data via a hidden Markov model. The transition matrix is estimated from history; the current state is a probability distribution over states. Strengths: principled uncertainty quantification, well-understood econometrics. Limitation: assumes a fixed number of regimes and stationary transition probabilities.
+
+### Critical points and LPPL (Sornette)
+
+Regimes end at deterministic critical points driven by positive feedback (herding, leverage). Log-periodic power law oscillations in price signal an approaching singularity. Strengths: forward-looking crash timing, grounded in statistical physics. Limitation: hard to distinguish signal from noise in real time.
+
+### Critical slowing down (Scheffer et al.)
+
+Near a tipping point, systems recover more slowly from small perturbations. Observable signatures: rising variance, rising autocorrelation, and rising cross-correlation across variables as the system approaches a bifurcation. Practical use: monitor rolling variance and AR(1) coefficient of key signals — acceleration in both is a warning independent of any specific model.
+
+### Hawkes processes and event clustering (Bacry, Muzy, Jaisson)
+
+Extreme events cluster in time due to self-excitation: each event raises the probability of further events. Regime transitions appear as shifts in the branching ratio (ratio of triggered to background events). A branching ratio approaching 1 signals a system near criticality. Applies to order flow, volatility spikes, and default events.
+
+### Rough volatility (Gatheral, Rosenbaum)
+
+Realized volatility has a Hurst exponent H ≈ 0.1, far below 0.5. Volatility is rougher than a random walk and has long-range anti-persistence at short scales. Standard GARCH-based models underestimate short-term vol clustering; rough vol models better capture rapid spikes that precede stress regimes.
+
+### Intermediary asset pricing (Adrian, Shin, He, Krishnamurthy)
+
+Leverage and balance-sheet constraints of financial intermediaries drive risk premia and liquidity. When intermediary capital is scarce, risk premia spike and liquidity dries up simultaneously — a defining signature of risk-off regimes. Provides a unified explanation for credit spreads, VRP, and funding stress co-moving at regime transitions.
 
 ## References
 
