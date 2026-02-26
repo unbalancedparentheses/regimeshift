@@ -238,6 +238,7 @@ Signals are grouped into thematic families. Each entry lists the data source, ra
   - Source: FRED `SOFR`, `DFF` (fed funds); OIS from Bloomberg/ICE (paid)
   - Raw: SOFR-OIS spread in bps
   - Normalize: `z`
+  - Note: prefer SOFR-OIS over FRA-OIS for pure funding stress. FRA-OIS also embeds term premium and rate expectations, which can produce false signals during normal rate cycles. The FT documented this distortion during the 2018 Libor transition period.
 - TED spread
   - Source: FRED `TEDRATE` (discontinued April 2022); substitute `TB3MS` minus `SOFR`
   - Raw: spread in bps
@@ -297,6 +298,11 @@ Signals are grouped into thematic families. Each entry lists the data source, ra
   - Source: rolling covariance matrix of equity, credit, rates, commodities
   - Raw: largest eigenvalue of rolling correlation matrix (concentration = systemic co-movement)
   - Normalize: `z`
+- Price trend (time-series momentum)
+  - Source: returns of equity, bond, commodity, and FX indices
+  - Raw: 12-month return excluding the most recent month (r_{t-12, t-1}) for each asset class
+  - Normalize: `z`
+  - Note: persistent positive trend across risk assets = risk-on; simultaneous trend reversals or negative 12-month returns across multiple asset classes = risk-off warning. Moskowitz, Ooi, Pedersen (2012) show trend following is most effective during crisis periods — the signal earns its strongest returns exactly when diversification fails.
 
 **Positioning and flows**
 
@@ -656,7 +662,7 @@ A regime signal is only useful if it predicts something. Candidate target variab
 1. Label historical periods using the scoring formula.
 2. Compute forward returns and drawdowns conditional on each regime label.
 3. Check calibration: does `confidence` correlate with realized severity?
-4. Backtest a simple rule: hold equities in risk-on, hold cash/bonds in risk-off. Compare Sharpe and max drawdown to buy-and-hold.
+4. Backtest a simple rule: hold equities in risk-on, hold cash/bonds in risk-off. Compare Sharpe and max drawdown to buy-and-hold and to a simple 12-1 time-series momentum strategy — the latter is a stronger benchmark since it also captures regime dynamics.
 5. Re-weight bucket coefficients to maximize out-of-sample Sharpe using a held-out period.
 
 **Overfitting warning:** with 7 buckets and ~20 underlying signals, re-weighting on historical data will overfit unless disciplined. Recommended approach: (a) use a long out-of-sample period (at least 10 years held out); (b) constrain weights to be positive and sum to 1; (c) prefer equal weighting as baseline and treat optimized weights with skepticism unless improvement is large and stable across sub-periods.
@@ -676,20 +682,21 @@ In the scoring formula, fast signals should dominate for short-horizon regime ca
 
 These are sanity checks, not backtests: does each signal move in the expected direction during known episodes? Use this table to validate signal implementations before running a full evaluation.
 
-| Signal | Sept 2008 (Lehman) | Mar 2020 (COVID) | 2022 (rate shock) | 2013 (Taper Tantrum) |
-|--------|---------------------|------------------|-------------------|----------------------|
-| VIX | ~80 (extreme) | ~85 (extreme) | ~35 (elevated) | ~21 (moderate) |
-| HY OAS | >1000 bps | ~1000 bps | ~600 bps | ~500 bps |
-| 10Y-2Y | steepening (flight to safety) | steep | deeply inverted | flattening |
-| SOFR-OIS / TED | ~450 bps | ~50 bps | ~20 bps | ~15 bps |
-| VRP | negative (RV >> IV) | near-zero → negative | positive, elevated | positive |
-| Cross-asset λ_frac | near 1.0 | near 1.0 | moderate | low-moderate |
-| STLFSI | extreme (+4 to +6) | extreme (+5) | moderate (+1) | mild |
-| **Expected regime** | **risk-off** | **risk-off** | **neutral to risk-off** | **neutral** |
+| Signal | Sept 2008 (Lehman) | Mar 2020 (COVID) | Feb 2018 (Volmageddon) | 2022 (rate shock) | 2013 (Taper Tantrum) |
+|--------|---------------------|------------------|------------------------|-------------------|----------------------|
+| VIX | ~80 (extreme) | ~85 (extreme) | ~14 → ~37 (one day) | ~35 (elevated) | ~21 (moderate) |
+| HY OAS | >1000 bps | ~1000 bps | ~330 bps (tight) | ~600 bps | ~500 bps |
+| 10Y-2Y | steepening (flight to safety) | steep | normal | deeply inverted | flattening |
+| SOFR-OIS / TED | ~450 bps | ~50 bps | unchanged | ~20 bps | ~15 bps |
+| VRP | negative (RV >> IV) | near-zero → negative | brief inversion, then recovered | positive, elevated | positive |
+| Cross-asset λ_frac | near 1.0 | near 1.0 | brief spike, equities only | moderate | low-moderate |
+| STLFSI | extreme (+4 to +6) | extreme (+5) | negligible | moderate (+1) | mild |
+| **Expected regime** | **risk-off** | **risk-off** | **brief risk-off, rapid reversion** | **neutral to risk-off** | **neutral** |
 
 Key observations:
 
 - **2008 and 2020** are both unambiguous: all signal families fire simultaneously. The model should give high-confidence risk-off with no ambiguity across buckets.
+- **Feb 2018 (Volmageddon)** is the purest structural vol event: the VIX spike was caused by forced buying from inverse-vol ETPs (XIV termination), not by credit or macro deterioration. HY spreads, SOFR-OIS, and STLFSI barely moved. The model should fire a brief risk-off signal from the volatility bucket alone and revert within days — a useful test of regime persistence logic.
 - **2022** was a structural rate normalization, not a credit crisis. Credit spreads widened but not to crisis levels; funding stress (SOFR-OIS) stayed contained; VIX peaked around 35. The model should give moderate risk-off, not extreme — a useful check that the model doesn't over-react to rate moves alone.
 - **2013 Taper Tantrum** was a brief false alarm: a rate spike reversed once the Fed signaled patience. Useful test case for signal decay and mean-reversion; the model should not stay risk-off for more than a few weeks.
 - **VRP goes negative in acute crises** (2008, early 2020) because realized vol spikes faster than options reprice. Treat negative VRP as a stress signal in the regime context, not a contrarian buy signal.
@@ -827,6 +834,9 @@ signals:
 - Bollerslev, Tauchen, Zhou (2009). Expected stock returns and variance risk premia. Review of Financial Studies. https://scholars.duke.edu/individual/pub732839
 - Barndorff-Nielsen, Shephard (2002). Econometric analysis of realized volatility and its use in estimating stochastic volatility models. Journal of the Royal Statistical Society B. https://doi.org/10.1111/1467-9868.00336
 - Barndorff-Nielsen, Shephard (2004). Power and bipower variation with stochastic volatility and jumps. Journal of Financial Econometrics. https://doi.org/10.1093/jjfinec/nbh001
+- Bhansali (2008). Offensive risk management: can tail risk hedging be profitable? Journal of Portfolio Management. https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1573760
+- Bhansali (2020). Monetization matters: active tail risk management and the Great Virus Crisis. Journal of Portfolio Management. https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3668370
+- Bhansali (2021). Tail risk hedging performance: measuring what counts. Journal of Portfolio Management. https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3962552
 - Bollerslev, Todorov (2011). Tails, fears, and risk premia. Journal of Finance. https://doi.org/10.1111/j.1540-6261.2011.01695.x
 - Bollerslev, Todorov, Xu (2015). Tail risk premia and return predictability. Journal of Financial Economics. https://scholars.duke.edu/publication/1060835
 - Bollerslev, Marrone, Xu, Zhou (2014). Stock return predictability and variance risk premia: international evidence. Journal of Financial and Quantitative Analysis. https://www.cambridge.org/core/journals/journal-of-financial-and-quantitative-analysis/article/abs/stock-return-predictability-and-variance-risk-premia-statistical-inference-and-international-evidence/0BE5DE1D942A0342DDBA24D7BFBEA5C8
@@ -918,12 +928,18 @@ signals:
 
 - Estrella, Mishkin (1998). Predicting U.S. recessions: financial variables as leading indicators. Review of Economics and Statistics. https://doi.org/10.1162/003465398557320
 - Schularick, Taylor (2012). Credit booms gone bust: monetary policy, leverage cycles, and financial crises, 1870–2008. American Economic Review. https://doi.org/10.1257/aer.102.2.1029
+- Jordà, Knoll, Kuvshinov, Schularick, Taylor (2019). The rate of return on everything, 1870–2015. Quarterly Journal of Economics. https://doi.org/10.1093/qje/qjy032 — long-run returns on housing, equities, bonds, and bills across 16 countries; useful baseline for regime-dependent return expectations.
 
 ### International regimes and currency crises
 
 - Kaminsky, Reinhart (1999). The twin crises: the causes of banking and balance-of-payments problems. American Economic Review. https://doi.org/10.1257/aer.89.3.473
 - Calvo (1998). Capital flows and capital-market crises: the simple economics of sudden stops. Journal of Applied Economics. https://doi.org/10.1080/15140326.1998.12040516
 - Forbes, Rigobon (2002). No contagion, only interdependence: measuring stock market comovements. Journal of Finance. https://doi.org/10.1111/0022-1082.00494
+
+### Momentum and trend
+
+- Jegadeesh, Titman (1993). Returns to buying winners and selling losers: implications for stock market efficiency. Journal of Finance. https://doi.org/10.1111/j.1540-6261.1993.tb04702.x — foundational cross-sectional momentum paper; positive momentum across risk assets is a risk-on indicator.
+- Moskowitz, Ooi, Pedersen (2012). Time series momentum. Journal of Financial Economics. https://doi.org/10.1016/j.jfineco.2011.11.003 — time-series momentum earns its strongest returns during and after crisis periods; trend-following is a natural benchmark for regime-aware strategies.
 
 ### Text and sentiment
 
